@@ -1,17 +1,20 @@
 #pragma once
 #include <memory>
 #include <string>
-#include <atomic>
 #include <mutex>
 
-// Forward declarations for types added in later phases
-// class GaussianModel;
-// class AsyncJob;
+// Forward-declared to avoid pulling in torch headers everywhere
+class GaussianModel;
 
 struct AppState {
-    // Active status message shown in the UI (set from any thread)
-    std::string     statusMessage{"Ready"};
-    std::mutex      statusMutex;
+    // Loaded 3DGS model — null until imported or trained.
+    // Write only from the main thread (or under gaussianMutex from bg thread).
+    std::shared_ptr<GaussianModel> gaussianModel;
+    std::mutex                     gaussianMutex;
+
+    // Status bar text (safe to write from any thread)
+    std::string statusMessage{"Ready"};
+    std::mutex  statusMutex;
 
     bool showProgressModal{false};
 
