@@ -1,7 +1,7 @@
 #pragma once
 #include <memory>
-#include <string>
 #include <mutex>
+#include <string>
 
 // Forward-declared to avoid pulling in torch headers everywhere
 class GaussianModel;
@@ -10,11 +10,11 @@ struct AppState {
     // Loaded 3DGS model — null until imported or trained.
     // Write only from the main thread (or under gaussianMutex from bg thread).
     std::shared_ptr<GaussianModel> gaussianModel;
-    std::mutex                     gaussianMutex;
+    std::mutex gaussianMutex;
 
     // Status bar text (safe to write from any thread)
     std::string statusMessage{"Ready"};
-    std::mutex  statusMutex;
+    std::mutex statusMutex;
 
     bool showProgressModal{false};
 

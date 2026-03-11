@@ -1,4 +1,5 @@
 #include "SplatIO.hpp"
+
 #include "PlyParser.hpp"
 
 std::shared_ptr<GaussianModel> SplatIO::importPLY(const std::filesystem::path& path) {

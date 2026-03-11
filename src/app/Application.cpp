@@ -1,14 +1,14 @@
 #include "Application.hpp"
+
 #include "render/VulkanContext.hpp"
 
+#include <GLFW/glfw3.h>
+#include <cstdio>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
-#include <GLFW/glfw3.h>
-#include <vulkan/vulkan.h>
-
-#include <cstdio>
 #include <stdexcept>
+#include <vulkan/vulkan.h>
 
 Application::Application() {
     m_window.init("World Imagine", 1280, 720);
@@ -46,9 +46,12 @@ void Application::run() {
         vkWaitForFences(ctx.device, 1, &frame.inFlightFence, VK_TRUE, UINT64_MAX);
 
         uint32_t imageIndex{};
-        VkResult result = vkAcquireNextImageKHR(
-            ctx.device, ctx.swapchain, UINT64_MAX,
-            frame.imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(ctx.device,
+                                                ctx.swapchain,
+                                                UINT64_MAX,
+                                                frame.imageAvailableSemaphore,
+                                                VK_NULL_HANDLE,
+                                                &imageIndex);
 
         if (!handleSwapchainResult(result))
             continue;

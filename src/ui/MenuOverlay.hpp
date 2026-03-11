@@ -4,10 +4,10 @@
 struct AppState;
 
 class MenuOverlay {
-public:
+  public:
     void draw(AppState& state);
 
-private:
+  private:
     bool m_visible{false};
 
     // Import dialog state

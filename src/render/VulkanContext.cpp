@@ -1,7 +1,6 @@
 #include "VulkanContext.hpp"
 
 #include <GLFW/glfw3.h>
-
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -20,15 +19,14 @@ static void vkCheck(VkResult r, const char* msg) {
 // Validation layer support
 // ---------------------------------------------------------------------------
 #ifndef NDEBUG
-static constexpr bool k_enableValidation = true;
+static constexpr bool k_enableValidation       = true;
 static constexpr const char* k_validationLayer = "VK_LAYER_KHRONOS_validation";
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT      severity,
-    VkDebugUtilsMessageTypeFlagsEXT             /*type*/,
-    const VkDebugUtilsMessengerCallbackDataEXT* data,
-    void*                                       /*userData*/)
-{
+static VKAPI_ATTR VkBool32 VKAPI_CALL
+debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+              VkDebugUtilsMessageTypeFlagsEXT /*type*/,
+              const VkDebugUtilsMessengerCallbackDataEXT* data,
+              void* /*userData*/) {
     if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
         fprintf(stderr, "[Vulkan] %s\n", data->pMessage);
     return VK_FALSE;
@@ -36,14 +34,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
 static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCI() {
     VkDebugUtilsMessengerCreateInfoEXT ci{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-    ci.messageSeverity =
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    ci.messageType =
-        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    ci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    ci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     ci.pfnUserCallback = debugCallback;
     return ci;
 }
@@ -94,7 +90,8 @@ void VulkanContext::destroy() {
     if (debugMessenger) {
         auto fn = (PFN_vkDestroyDebugUtilsMessengerEXT)
             vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-        if (fn) fn(instance, debugMessenger, nullptr);
+        if (fn)
+            fn(instance, debugMessenger, nullptr);
     }
 #endif
     vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -108,7 +105,7 @@ void VulkanContext::recreateSwapchain(int width, int height) {
     cleanupSwapchain();
     createSwapchain(width, height);
     createSwapchainImageViews();
-    createFramebuffers();   // render pass is reused, framebuffers need new image views
+    createFramebuffers(); // render pass is reused, framebuffers need new image views
 }
 
 // ---------------------------------------------------------------------------
@@ -136,11 +133,11 @@ void VulkanContext::createInstance() {
     ci.ppEnabledExtensionNames = extensions.data();
 
 #ifndef NDEBUG
-    const char* layers[] = {k_validationLayer};
+    const char* layers[]   = {k_validationLayer};
     ci.enabledLayerCount   = 1;
     ci.ppEnabledLayerNames = layers;
-    auto debugCI = makeDebugMessengerCI();
-    ci.pNext = &debugCI;
+    auto debugCI           = makeDebugMessengerCI();
+    ci.pNext               = &debugCI;
 #endif
 
     vkCheck(vkCreateInstance(&ci, nullptr, &instance), "vkCreateInstance");
@@ -152,8 +149,9 @@ void VulkanContext::createInstance() {
 #ifndef NDEBUG
 void VulkanContext::createDebugMessenger() {
     auto ci = makeDebugMessengerCI();
-    auto fn = (PFN_vkCreateDebugUtilsMessengerEXT)
-        vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    auto fn =
+        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance,
+                                                                  "vkCreateDebugUtilsMessengerEXT");
     if (fn)
         vkCheck(fn(instance, &ci, nullptr, &debugMessenger), "vkCreateDebugUtilsMessengerEXT");
 }
@@ -200,10 +198,11 @@ void VulkanContext::pickPhysicalDevice() {
         return hasGraphics ? score : 0;
     };
 
-    physicalDevice = *std::max_element(devices.begin(), devices.end(),
-        [&](VkPhysicalDevice a, VkPhysicalDevice b) {
-            return scoreDevice(a) < scoreDevice(b);
-        });
+    physicalDevice = *std::max_element(devices.begin(),
+                                       devices.end(),
+                                       [&](VkPhysicalDevice a, VkPhysicalDevice b) {
+                                           return scoreDevice(a) < scoreDevice(b);
+                                       });
 
     if (scoreDevice(physicalDevice) == 0)
         throw std::runtime_error("No suitable Vulkan device found");
@@ -281,7 +280,7 @@ void VulkanContext::createCommandPool() {
 void VulkanContext::createDescriptorPool() {
     VkDescriptorPoolSize poolSize{
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        128   // enough for ImGui fonts + future texture samplers
+        128 // enough for ImGui fonts + future texture samplers
     };
     VkDescriptorPoolCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     ci.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
@@ -320,7 +319,10 @@ void VulkanContext::createSwapchain(int width, int height) {
     uint32_t pmCount{};
     vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &pmCount, nullptr);
     std::vector<VkPresentModeKHR> presentModes(pmCount);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &pmCount, presentModes.data());
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice,
+                                              surface,
+                                              &pmCount,
+                                              presentModes.data());
 
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
     for (auto pm : presentModes) {
@@ -334,14 +336,16 @@ void VulkanContext::createSwapchain(int width, int height) {
     if (caps.currentExtent.width != UINT32_MAX) {
         swapchainExtent = caps.currentExtent;
     } else {
-        swapchainExtent = {
-            std::clamp(static_cast<uint32_t>(width),  caps.minImageExtent.width,  caps.maxImageExtent.width),
-            std::clamp(static_cast<uint32_t>(height), caps.minImageExtent.height, caps.maxImageExtent.height)
-        };
+        swapchainExtent = {std::clamp(static_cast<uint32_t>(width),
+                                      caps.minImageExtent.width,
+                                      caps.maxImageExtent.width),
+                           std::clamp(static_cast<uint32_t>(height),
+                                      caps.minImageExtent.height,
+                                      caps.maxImageExtent.height)};
     }
 
-    uint32_t imageCount = std::min(caps.minImageCount + 1,
-        caps.maxImageCount > 0 ? caps.maxImageCount : UINT32_MAX);
+    uint32_t imageCount =
+        std::min(caps.minImageCount + 1, caps.maxImageCount > 0 ? caps.maxImageCount : UINT32_MAX);
 
     VkSwapchainCreateInfoKHR ci{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
     ci.surface          = surface;
@@ -441,8 +445,7 @@ void VulkanContext::createFramebuffers() {
         ci.width           = swapchainExtent.width;
         ci.height          = swapchainExtent.height;
         ci.layers          = 1;
-        vkCheck(vkCreateFramebuffer(device, &ci, nullptr, &framebuffers[i]),
-                "vkCreateFramebuffer");
+        vkCheck(vkCreateFramebuffer(device, &ci, nullptr, &framebuffers[i]), "vkCreateFramebuffer");
     }
 }
 
@@ -456,8 +459,8 @@ void VulkanContext::createFrameData() {
     allocInfo.commandBufferCount = 1;
 
     VkSemaphoreCreateInfo semCI{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VkFenceCreateInfo     fenCI{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    fenCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;  // start signaled so first frame doesn't wait
+    VkFenceCreateInfo fenCI{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    fenCI.flags = VK_FENCE_CREATE_SIGNALED_BIT; // start signaled so first frame doesn't wait
 
     for (auto& f : frames) {
         vkCheck(vkAllocateCommandBuffers(device, &allocInfo, &f.commandBuffer),
@@ -466,8 +469,7 @@ void VulkanContext::createFrameData() {
                 "vkCreateSemaphore imageAvailable");
         vkCheck(vkCreateSemaphore(device, &semCI, nullptr, &f.renderFinishedSemaphore),
                 "vkCreateSemaphore renderFinished");
-        vkCheck(vkCreateFence(device, &fenCI, nullptr, &f.inFlightFence),
-                "vkCreateFence");
+        vkCheck(vkCreateFence(device, &fenCI, nullptr, &f.inFlightFence), "vkCreateFence");
     }
 }
 

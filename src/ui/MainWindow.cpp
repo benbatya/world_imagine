@@ -7,9 +7,8 @@
 // GLFW must be included AFTER Vulkan headers
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-
-#include <stdexcept>
 #include <cstdio>
+#include <stdexcept>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -20,7 +19,7 @@ static void vkCheck(VkResult r) {
 }
 
 void MainWindow::framebufferResizeCallback(GLFWwindow* window, int /*w*/, int /*h*/) {
-    auto* self = static_cast<MainWindow*>(glfwGetWindowUserPointer(window));
+    auto* self      = static_cast<MainWindow*>(glfwGetWindowUserPointer(window));
     self->m_resized = true;
 }
 
@@ -54,28 +53,28 @@ void MainWindow::init(const char* title, int width, int height) {
 
     // Dark theme
     ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding  = 4.0f;
-    style.FrameRounding   = 3.0f;
-    style.GrabRounding    = 3.0f;
-    style.Alpha           = 0.95f;
+    ImGuiStyle& style    = ImGui::GetStyle();
+    style.WindowRounding = 4.0f;
+    style.FrameRounding  = 3.0f;
+    style.GrabRounding   = 3.0f;
+    style.Alpha          = 0.95f;
 
     // GLFW backend
     ImGui_ImplGlfw_InitForVulkan(m_window, /*install_callbacks=*/true);
 
     // Vulkan backend
     ImGui_ImplVulkan_InitInfo initInfo{};
-    initInfo.Instance       = m_ctx.instance;
-    initInfo.PhysicalDevice = m_ctx.physicalDevice;
-    initInfo.Device         = m_ctx.device;
-    initInfo.QueueFamily    = m_ctx.graphicsQueueFamily;
-    initInfo.Queue          = m_ctx.graphicsQueue;
-    initInfo.DescriptorPool                      = m_ctx.descriptorPool;
-    initInfo.PipelineInfoMain.RenderPass         = m_ctx.renderPass;
-    initInfo.PipelineInfoMain.MSAASamples        = VK_SAMPLE_COUNT_1_BIT;
-    initInfo.MinImageCount                       = 2;
-    initInfo.ImageCount                          = static_cast<uint32_t>(m_ctx.swapchainImages.size());
-    initInfo.CheckVkResultFn                     = [](VkResult r) { vkCheck(r); };
+    initInfo.Instance                     = m_ctx.instance;
+    initInfo.PhysicalDevice               = m_ctx.physicalDevice;
+    initInfo.Device                       = m_ctx.device;
+    initInfo.QueueFamily                  = m_ctx.graphicsQueueFamily;
+    initInfo.Queue                        = m_ctx.graphicsQueue;
+    initInfo.DescriptorPool               = m_ctx.descriptorPool;
+    initInfo.PipelineInfoMain.RenderPass  = m_ctx.renderPass;
+    initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.MinImageCount                = 2;
+    initInfo.ImageCount                   = static_cast<uint32_t>(m_ctx.swapchainImages.size());
+    initInfo.CheckVkResultFn              = [](VkResult r) { vkCheck(r); };
 
     ImGui_ImplVulkan_Init(&initInfo);
     // Note: fonts are uploaded automatically by ImGui_ImplVulkan_Init in this ImGui version

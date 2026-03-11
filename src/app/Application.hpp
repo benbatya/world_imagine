@@ -4,7 +4,7 @@
 #include "ui/MenuOverlay.hpp"
 
 class Application {
-public:
+  public:
     Application();
     ~Application();
 
@@ -14,11 +14,11 @@ public:
 
     void run();
 
-private:
+  private:
     void renderFrame(uint32_t imageIndex);
     bool handleSwapchainResult(VkResult result);
 
-    AppState    m_state;
-    MainWindow  m_window;
+    AppState m_state;
+    MainWindow m_window;
     MenuOverlay m_menuOverlay;
 };
