@@ -4,6 +4,7 @@
 #include "render/VulkanContext.hpp"
 
 #include <imgui.h>
+#include <cmath>
 
 void Viewport3D::init(VulkanContext& ctx, uint32_t width, uint32_t height,
                       const std::string& shaderDir) {
@@ -46,6 +47,23 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
     }
     if (current && current != m_lastModel) {
       m_lastModel = current;
+
+      // Auto-fit camera to the scene bounding box
+      if (current->numSplats() > 0 && current->positions.defined()) {
+        std::lock_guard posLock{current->mutex};
+        auto pos = current->positions.cpu(); // [N, 3]
+        auto mn  = std::get<0>(pos.min(0)); // [3] min per axis
+        auto mx  = std::get<0>(pos.max(0)); // [3] max per axis
+        Vec3 bmin = {mn[0].item<float>(), mn[1].item<float>(), mn[2].item<float>()};
+        Vec3 bmax = {mx[0].item<float>(), mx[1].item<float>(), mx[2].item<float>()};
+        Vec3 center{(bmin.x + bmax.x) * 0.5f,
+                    (bmin.y + bmax.y) * 0.5f,
+                    (bmin.z + bmax.z) * 0.5f};
+        Vec3 ext   = bmax - bmin;
+        float radius = std::sqrt(ext.x*ext.x + ext.y*ext.y + ext.z*ext.z) * 0.5f;
+        m_camera.fitToBounds(center, radius);
+      }
+
       m_renderer.uploadSplats(ctx, *current, m_camera);
       state.setStatus("Splats uploaded: " + std::to_string(current->numSplats()));
     }

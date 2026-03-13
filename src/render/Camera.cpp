@@ -86,3 +86,12 @@ void Camera::dolly(float delta) {
   distance *= (1.f - delta * 0.001f);
   if (distance < 0.01f) distance = 0.01f;
 }
+
+void Camera::fitToBounds(Vec3 center, float radius) {
+  if (radius < 1e-4f) radius = 1.f;
+  target   = center;
+  distance = radius * 2.5f;
+  zNear    = radius * 0.001f;
+  zFar     = radius * 20.f;
+  // Keep current azimuth/elevation so the user's orientation is preserved on re-load
+}

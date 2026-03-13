@@ -63,4 +63,8 @@ public:
   void orbit(float dx, float dy);
   void pan(float dx, float dy);
   void dolly(float delta);
+
+  // Reset camera to frame a bounding box defined by its center and radius.
+  // Positions the camera at 2.5× the radius away, facing the center.
+  void fitToBounds(Vec3 center, float radius);
 };
