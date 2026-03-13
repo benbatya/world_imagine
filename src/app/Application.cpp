@@ -8,16 +8,30 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 #include <stdexcept>
+#include <filesystem>
+#include <string>
+#include <unistd.h>
 #include <vulkan/vulkan.h>
+
+static std::string exeDir() {
+  char buf[4096]{};
+  ssize_t len = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  if (len <= 0) return ".";
+  return std::filesystem::path(buf).parent_path().string();
+}
 
 Application::Application() {
   m_window.init("World Imagine", 1280, 720);
+
+  auto& ctx        = m_window.vkCtx();
+  std::string shaderDir = exeDir() + "/shaders";
+  m_viewport.init(ctx, 800, 600, shaderDir);
 }
 
 Application::~Application() {
-  // Ensure GPU is idle before destroying anything
   auto& ctx = m_window.vkCtx();
   vkDeviceWaitIdle(ctx.device);
+  m_viewport.destroy(ctx);
   m_window.destroy();
 }
 
@@ -31,7 +45,6 @@ void Application::run() {
     if (m_window.wasResized()) {
       int w, h;
       glfwGetFramebufferSize(m_window.glfwHandle(), &w, &h);
-      // Wait while minimized
       while (w == 0 || h == 0) {
         glfwGetFramebufferSize(m_window.glfwHandle(), &w, &h);
         glfwWaitEvents();
@@ -66,6 +79,7 @@ void Application::run() {
 
     // --- Draw UI ---
     m_menuOverlay.draw(m_state);
+    m_viewport.draw(ctx, m_state);
 
     // --- ImGui render ---
     ImGui::Render();
@@ -110,6 +124,10 @@ void Application::renderFrame(uint32_t imageIndex) {
   beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   vkBeginCommandBuffer(frame.commandBuffer, &beginInfo);
 
+  // Offscreen splat render pass (writes to SplatRenderer's color image)
+  m_viewport.renderOffscreen(ctx, frame.commandBuffer);
+
+  // Main ImGui render pass (swapchain framebuffer)
   VkClearValue clearColor{{{0.08f, 0.08f, 0.10f, 1.0f}}};
   VkRenderPassBeginInfo rpInfo{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
   rpInfo.renderPass      = ctx.renderPass;
@@ -119,10 +137,9 @@ void Application::renderFrame(uint32_t imageIndex) {
   rpInfo.pClearValues    = &clearColor;
 
   vkCmdBeginRenderPass(frame.commandBuffer, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
-
   ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), frame.commandBuffer);
-
   vkCmdEndRenderPass(frame.commandBuffer);
+
   vkEndCommandBuffer(frame.commandBuffer);
 }
 

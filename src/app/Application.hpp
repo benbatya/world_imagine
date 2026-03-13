@@ -2,6 +2,7 @@
 #include "AppState.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/MenuOverlay.hpp"
+#include "ui/Viewport3D.hpp"
 
 class Application {
 public:
@@ -18,7 +19,8 @@ private:
   void renderFrame(uint32_t imageIndex);
   bool handleSwapchainResult(VkResult result);
 
-  AppState m_state;
-  MainWindow m_window;
+  AppState    m_state;
+  MainWindow  m_window;
   MenuOverlay m_menuOverlay;
+  Viewport3D  m_viewport;
 };
