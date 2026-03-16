@@ -71,8 +71,8 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
 
   // Resize renderer if panel size changed
   ImVec2 avail = ImGui::GetContentRegionAvail();
-  uint32_t w = std::max(1u, static_cast<uint32_t>(avail.x));
-  uint32_t h = std::max(1u, static_cast<uint32_t>(avail.y));
+  uint32_t w = static_cast<uint32_t>(std::max(1.f, avail.x));
+  uint32_t h = static_cast<uint32_t>(std::max(1.f, avail.y));
   if (w != m_vpWidth || h != m_vpHeight) {
     m_vpWidth  = w;
     m_vpHeight = h;
