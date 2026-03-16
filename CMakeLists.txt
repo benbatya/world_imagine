@@ -33,7 +33,7 @@ find_package(glfw3 3.3 REQUIRED)
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        docking
+    GIT_TAG        v1.92.6-docking
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(imgui)
@@ -60,7 +60,7 @@ target_compile_options(imgui PRIVATE -w)
 FetchContent_Declare(
     vma
     GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-    GIT_TAG        master
+    GIT_TAG        v3.3.0
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(vma)
@@ -74,7 +74,7 @@ target_include_directories(vma INTERFACE ${vma_SOURCE_DIR}/include)
 FetchContent_Declare(
     nfd
     GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
-    GIT_TAG        master
+    GIT_TAG        v1.3.0
     GIT_SHALLOW    TRUE
 )
 set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
