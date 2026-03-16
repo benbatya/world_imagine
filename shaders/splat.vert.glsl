@@ -74,6 +74,15 @@ void main() {
   vec4 posView = cam.view * vec4(pos, 1.0);
   float tz = posView.z; // negative when in front of camera
 
+  // Discard nearly-invisible splats early (pre-sigmoid opacity threshold)
+  float alpha = sigmoid(opacity);
+  if (alpha < 0.004) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    outUV    = vec2(0.0);
+    outColor = vec4(0.0);
+    return;
+  }
+
   // Cull splats behind the near plane or at the camera
   if (tz >= -0.001) {
     gl_Position = vec4(0.0, 0.0, 2.0, 1.0); // behind clip volume, discarded
@@ -141,8 +150,8 @@ void main() {
   float lambda1 = mid + disc; // larger eigenvalue
   float lambda2 = mid - disc;
 
-  float r1 = 3.0 * sqrt(max(0.0, lambda1)); // NDC radius along major axis
-  float r2 = 3.0 * sqrt(max(0.0, lambda2)); // NDC radius along minor axis
+  float r1 = min(3.0 * sqrt(max(0.0, lambda1)), 1.5); // NDC radius along major axis (clamped)
+  float r2 = min(3.0 * sqrt(max(0.0, lambda2)), 1.5); // NDC radius along minor axis (clamped)
 
   // Eigenvector for lambda1 (major axis direction in NDC)
   vec2 axis1;
@@ -172,6 +181,5 @@ void main() {
   const float C0 = 0.28209479177387814;
   vec3 rgb = clamp(C0 * dcSH + 0.5, 0.0, 1.0);
 
-  float alpha = sigmoid(opacity);
   outColor = vec4(rgb, alpha);
 }

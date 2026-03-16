@@ -1,6 +1,8 @@
 #include "Application.hpp"
 
 #include "render/VulkanContext.hpp"
+#include "io/SplatIO.hpp"
+#include "model/GaussianModel.hpp"
 
 #include <GLFW/glfw3.h>
 #include <cstdio>
@@ -21,13 +23,30 @@ static std::string exeDir() {
   return std::filesystem::path(buf).parent_path().string();
 }
 
-Application::Application() {
+Application::Application(int argc, char* argv[]) {
   NFD_Init();
   m_window.init("World Imagine", 1280, 720);
 
-  auto& ctx        = m_window.vkCtx();
+  auto& ctx             = m_window.vkCtx();
   std::string shaderDir = exeDir() + "/shaders";
   m_viewport.init(ctx, 800, 600, shaderDir);
+
+  // Load a PLY file if one was passed as the first positional argument
+  if (argc >= 2) {
+    std::string path{argv[1]};
+    try {
+      SplatIO io;
+      auto model = io.importPLY(path);
+      size_t n   = model->numSplats();
+      {
+        std::lock_guard lock{m_state.gaussianMutex};
+        m_state.gaussianModel = std::move(model);
+      }
+      m_state.setStatus("Loaded " + std::to_string(n) + " splats from " + path);
+    } catch (const std::exception& ex) {
+      m_state.setStatus(std::string("Failed to load '") + path + "': " + ex.what());
+    }
+  }
 }
 
 Application::~Application() {
