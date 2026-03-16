@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <string>
 #include <unistd.h>
+#include <nfd.h>
 #include <vulkan/vulkan.h>
 
 static std::string exeDir() {
@@ -21,6 +22,7 @@ static std::string exeDir() {
 }
 
 Application::Application() {
+  NFD_Init();
   m_window.init("World Imagine", 1280, 720);
 
   auto& ctx        = m_window.vkCtx();
@@ -33,6 +35,7 @@ Application::~Application() {
   vkDeviceWaitIdle(ctx.device);
   m_viewport.destroy(ctx);
   m_window.destroy();
+  NFD_Quit();
 }
 
 void Application::run() {

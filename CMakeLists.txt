@@ -69,7 +69,19 @@ add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE ${vma_SOURCE_DIR}/include)
 
 # ---------------------------------------------------------------------------
-# 5. SPIR-V shader compilation via glslangValidator
+# 5. Native File Dialog Extended (NFDe) — system open/save dialogs
+# ---------------------------------------------------------------------------
+FetchContent_Declare(
+    nfd
+    GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(nfd)
+
+# ---------------------------------------------------------------------------
+# 6. SPIR-V shader compilation via glslangValidator (renumbered)
 # ---------------------------------------------------------------------------
 find_program(GLSLANG_VALIDATOR glslangValidator REQUIRED)
 
@@ -96,7 +108,7 @@ endforeach()
 add_custom_target(shaders ALL DEPENDS ${SPV_OUTPUTS})
 
 # ---------------------------------------------------------------------------
-# 6. Main executable
+# 7. Main executable
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
@@ -107,6 +119,7 @@ target_include_directories(world_imagine PRIVATE src)
 target_link_libraries(world_imagine PRIVATE
     imgui
     vma
+    nfd
     glfw
     Vulkan::Vulkan
     "${TORCH_LIBRARIES}"
