@@ -492,7 +492,13 @@ void SplatRenderer::render(VulkanContext& ctx,
     vkCmdSetViewport(cmd, 0, 1, &vp);
     vkCmdSetScissor(cmd, 0, 1, &sc);
 
-    vkCmdDraw(cmd, static_cast<uint32_t>(m_splatCount * 6), 1, 0, 0);
+    // Cap draw count to avoid GPU context-switch timeout (Xid 109) on large models.
+    // Splats are sorted back-to-front; draw the closest ones via firstVertex offset.
+    static constexpr size_t kMaxRenderSplats = 250'000;
+    size_t drawCount = std::min(m_splatCount, kMaxRenderSplats);
+    uint32_t firstVert = static_cast<uint32_t>((m_splatCount - drawCount) * 6);
+
+    vkCmdDraw(cmd, static_cast<uint32_t>(drawCount * 6), 1, firstVert, 0);
   }
 
   vkCmdEndRenderPass(cmd);

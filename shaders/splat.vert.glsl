@@ -150,8 +150,8 @@ void main() {
   float lambda1 = mid + disc; // larger eigenvalue
   float lambda2 = mid - disc;
 
-  float r1 = min(3.0 * sqrt(max(0.0, lambda1)), 1.5); // NDC radius along major axis (clamped)
-  float r2 = min(3.0 * sqrt(max(0.0, lambda2)), 1.5); // NDC radius along minor axis (clamped)
+  float r1 = min(3.0 * sqrt(max(0.0, lambda1)), 1.0); // NDC radius clamped to half-viewport
+  float r2 = min(3.0 * sqrt(max(0.0, lambda2)), 1.0);
 
   // Eigenvector for lambda1 (major axis direction in NDC)
   vec2 axis1;
