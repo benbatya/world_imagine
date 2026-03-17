@@ -2,8 +2,6 @@
 
 #include "render/VulkanContext.hpp"
 #include "io/SplatIO.hpp"
-#include "model/GaussianModel.hpp"
-#include "util/AsyncJob.hpp"
 
 #include <GLFW/glfw3.h>
 #include <cstdio>
@@ -34,22 +32,10 @@ Application::Application(int argc, char* argv[]) {
   std::string shaderDir = exeDir() + "/shaders";
   m_viewport.init(ctx, 800, 600, shaderDir);
 
-  // Load a PLY file if one was passed as the first positional argument
+  // Load a PLY file if one was passed as the first positional argument.
+  // The progress modal will handle display during run().
   if (argc >= 2) {
-    std::string path{argv[1]};
-    try {
-      AsyncJob job;
-      SplatIO io;
-      auto model = io.importPLY(path, job);
-      size_t n   = model ? model->numSplats() : 0;
-      {
-        std::lock_guard lock{m_state.gaussianMutex};
-        m_state.gaussianModel = std::move(model);
-      }
-      m_state.setStatus("Loaded " + std::to_string(n) + " splats from " + path);
-    } catch (const std::exception& ex) {
-      m_state.setStatus(std::string("Failed to load '") + path + "': " + ex.what());
-    }
+    SplatIO::instance().loadAsync(argv[1], m_state);
   }
 }
 

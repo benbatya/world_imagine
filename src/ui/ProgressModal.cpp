@@ -1,18 +1,21 @@
 #include "ProgressModal.hpp"
 
 #include "app/AppState.hpp"
-#include "util/AsyncJob.hpp"
+#include "io/SplatIO.hpp"
 
 #include <imgui.h>
-#include <exception>
 #include <string>
 
 static constexpr const char* k_popupId = "##progress_modal";
 
 void ProgressModal::draw(AppState& state) {
-    // Nothing to show if no job is active
-    if (!state.activeJob)
+    auto& io = SplatIO::instance();
+
+    // Nothing to show if no job is active or pending finalization
+    if (!io.isLoading() && !io.isDone()) {
+        m_opened = false;
         return;
+    }
 
     // Trigger the popup the first frame a job appears
     if (!m_opened) {
@@ -31,18 +34,16 @@ void ProgressModal::draw(AppState& state) {
     if (!ImGui::BeginPopupModal(k_popupId, nullptr, flags))
         return;
 
-    auto job = state.activeJob;
-
     // Status text
-    std::string txt = job->statusText();
+    std::string txt = io.statusText();
     if (!txt.empty())
         ImGui::TextWrapped("%s", txt.c_str());
     else
         ImGui::TextDisabled("Working…");
 
     // Progress bar — negative width fills available space
-    float p = job->progress();
-    char overlay[32];
+    float p = io.progress();
+    char  overlay[32];
     std::snprintf(overlay, sizeof(overlay), p > 0.f ? "%.0f%%" : "…", p * 100.f);
     ImGui::ProgressBar(p, {-1.f, 0.f}, overlay);
 
@@ -52,22 +53,12 @@ void ProgressModal::draw(AppState& state) {
     float btnW = 120.f;
     ImGui::SetCursorPosX((ImGui::GetWindowWidth() - btnW) * 0.5f);
     if (ImGui::Button("Cancel", {btnW, 0.f}))
-        job->requestCancel();
+        io.requestCancel();
 
     // Auto-close once the job reports done
-    if (job->isDone()) {
-        if (auto ex = job->exception()) {
-            try {
-                std::rethrow_exception(ex);
-            } catch (const std::exception& e) {
-                state.setStatus(std::string("Error: ") + e.what());
-            } catch (...) {
-                state.setStatus("Unknown error during background job");
-            }
-        }
-        state.activeJob.reset();
-        state.showProgressModal = false;
-        m_opened                = false;
+    if (io.isDone()) {
+        io.finalize(state);
+        m_opened = false;
         ImGui::CloseCurrentPopup();
     }
 

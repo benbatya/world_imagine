@@ -1,16 +1,13 @@
 #include "MenuOverlay.hpp"
 
 #include "app/AppState.hpp"
-#include "io/PlyParser.hpp"
 #include "io/SplatIO.hpp"
 #include "model/GaussianModel.hpp"
-#include "util/AsyncJob.hpp"
 
 #include <imgui.h>
 #include <nfd.h>
 #include <stdexcept>
 #include <string>
-#include <thread>
 
 // The menu appears when the mouse enters the top-left 150x150 px hot-zone
 // and stays visible until the mouse moves beyond 200px from that corner.
@@ -44,7 +41,7 @@ void MenuOverlay::draw(AppState& state) {
     ImGui::TextDisabled("  World Imagine  ");
     ImGui::Separator();
 
-    const bool jobRunning = state.activeJob && !state.activeJob->isDone();
+    const bool jobRunning = SplatIO::instance().isLoading();
 
     if (ImGui::MenuItem("Import Video")) {
         state.setStatus("Import Video: not yet implemented (Phase 5)");
@@ -55,47 +52,14 @@ void MenuOverlay::draw(AppState& state) {
         ImGui::BeginDisabled();
 
     if (ImGui::MenuItem("Import Splats")) {
-        nfdchar_t*       outPath = nullptr;
-        nfdfilteritem_t  filters[1] = {{"PLY files", "ply"}};
-        nfdresult_t      result     = NFD_OpenDialog(&outPath, filters, 1, nullptr);
+        nfdchar_t*      outPath = nullptr;
+        nfdfilteritem_t filters[1] = {{"PLY files", "ply"}};
+        nfdresult_t     result     = NFD_OpenDialog(&outPath, filters, 1, nullptr);
 
         if (result == NFD_OKAY) {
             std::string path{outPath};
             NFD_FreePath(outPath);
-
-            // Create job and store in AppState before launching the thread
-            auto job       = std::make_shared<AsyncJob>();
-            state.activeJob        = job;
-            state.showProgressModal = true;
-
-            // Join any previous thread first (it must be done by now since jobRunning was false)
-            state.bgThread.reset();
-
-            state.bgThread = std::jthread([path, job, &state]() {
-                std::shared_ptr<GaussianModel> model;
-                try {
-                    PlyParser parser;
-                    model = parser.loadAsync(path, *job);
-                } catch (...) {
-                    job->markDone(std::current_exception());
-                    return;
-                }
-
-                if (model) {
-                    size_t n = model->numSplats();
-                    {
-                        std::lock_guard lock{state.gaussianMutex};
-                        state.gaussianModel = std::move(model);
-                    }
-                    state.setStatus("Loaded " + std::to_string(n) + " splats");
-                } else {
-                    // Cancelled
-                    state.setStatus("Import cancelled");
-                }
-
-                job->setProgress(1.f);
-                job->markDone();
-            });
+            SplatIO::instance().loadAsync(path, state);
         }
     }
 
@@ -117,8 +81,7 @@ void MenuOverlay::draw(AppState& state) {
                 try {
                     if (!state.gaussianModel)
                         throw std::runtime_error("No model loaded");
-                    SplatIO io;
-                    io.exportPLY(*state.gaussianModel, outPath);
+                    SplatIO::instance().exportPLY(*state.gaussianModel, outPath);
                     state.setStatus("Exported to " + std::string(outPath));
                 } catch (const std::exception& ex) {
                     state.setStatus(std::string("Export failed: ") + ex.what());
