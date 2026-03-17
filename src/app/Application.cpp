@@ -9,8 +9,10 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
+#include <chrono>
 #include <stdexcept>
 #include <filesystem>
+#include <thread>
 #include <string>
 #include <unistd.h>
 #include <nfd.h>
@@ -58,7 +60,12 @@ Application::~Application() {
 }
 
 void Application::run() {
-  auto& ctx = m_window.vkCtx();
+  using Clock    = std::chrono::steady_clock;
+  using Duration = std::chrono::duration<double>;
+  static constexpr Duration k_frameBudget{1.0 / 60.0};
+
+  auto& ctx        = m_window.vkCtx();
+  auto  frameStart = Clock::now();
 
   while (!m_window.shouldClose()) {
     glfwPollEvents();
@@ -136,6 +143,11 @@ void Application::run() {
     handleSwapchainResult(result);
 
     ctx.currentFrame = (ctx.currentFrame + 1) % FRAMES_IN_FLIGHT;
+
+    // --- Frame-rate cap (60 fps) ---
+    auto nextFrame = frameStart + k_frameBudget;
+    std::this_thread::sleep_until(nextFrame);
+    frameStart = Clock::now();
   }
 }
 
