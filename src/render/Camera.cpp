@@ -47,7 +47,7 @@ Mat4 Camera::proj(float aspect) const {
   return m;
 }
 
-CameraUBO Camera::makeUBO(float aspect) const {
+CameraUBO Camera::makeUBO(float aspect, float vpWidth, float vpHeight) const {
   CameraUBO ubo;
   Mat4 v = view();
   Mat4 p = proj(aspect);
@@ -59,6 +59,8 @@ CameraUBO Camera::makeUBO(float aspect) const {
   ubo.camPos[0] = pos.x;
   ubo.camPos[1] = pos.y;
   ubo.camPos[2] = pos.z;
+  ubo.viewport[0] = vpWidth;
+  ubo.viewport[1] = vpHeight;
   return ubo;
 }
 

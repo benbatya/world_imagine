@@ -462,7 +462,7 @@ void SplatRenderer::render(VulkanContext& ctx,
                            uint32_t height) {
   // Update camera UBO every frame
   float aspect = (height > 0) ? static_cast<float>(width) / static_cast<float>(height) : 1.f;
-  CameraUBO ubo = cam.makeUBO(aspect);
+  CameraUBO ubo = cam.makeUBO(aspect, static_cast<float>(width), static_cast<float>(height));
   std::memcpy(m_cameraUBOMapped, &ubo, sizeof(ubo));
   vmaFlushAllocation(ctx.allocator, m_cameraUBOBuf.alloc, 0, sizeof(ubo));
 

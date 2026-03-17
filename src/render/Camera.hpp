@@ -33,12 +33,14 @@ inline Vec3 cross3(Vec3 a, Vec3 b) {
   return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
 
-// GPU-side camera uniform (std140 compatible: two mat4s + vec4).
+// GPU-side camera uniform (std140 compatible: two mat4s + two vec4s).
 struct CameraUBO {
   float view[16];
   float proj[16];
   float camPos[3];
-  float _pad{0.f};
+  float _pad0{0.f};
+  float viewport[2]; // width, height in pixels
+  float _pad1[2]{0.f, 0.f};
 };
 
 // Orbit camera. Position is derived from azimuth/elevation/distance around target.
@@ -57,7 +59,7 @@ public:
   Mat4 view() const;
   Mat4 proj(float aspect) const;
 
-  CameraUBO makeUBO(float aspect) const;
+  CameraUBO makeUBO(float aspect, float vpWidth = 0.f, float vpHeight = 0.f) const;
 
   // Orbit: dx/dy are pixel deltas
   void orbit(float dx, float dy);

@@ -6,7 +6,8 @@
 layout(set = 0, binding = 0) uniform CameraUBO {
   mat4 view;
   mat4 proj;
-  vec4 camPos; // w unused
+  vec4 camPos;    // w unused
+  vec4 viewport;  // xy = width, height in pixels; zw unused
 } cam;
 
 // 14 floats per splat:
@@ -135,10 +136,14 @@ void main() {
   float t11 = a11 * sv11 + a12 * sv12;
   float t12 = a11 * sv12 + a12 * sv22;
 
-  // Sigma_ndc = T * J^T  (2x2 symmetric result + regularization)
-  float sig_a = t00 * a00 + t02 * a02 + 0.3;
+  // Sigma_ndc = T * J^T  (2x2 symmetric result + low-pass filter)
+  // The 0.3-pixel² regularization must be converted from pixel-space to NDC-space:
+  //   ndc = 2 * pixel / viewport  →  cov_ndc = cov_pixel * 4 / viewport²
+  float lpX = 0.3 * 4.0 / (cam.viewport.x * cam.viewport.x);
+  float lpY = 0.3 * 4.0 / (cam.viewport.y * cam.viewport.y);
+  float sig_a = t00 * a00 + t02 * a02 + lpX;
   float sig_b = t01 * a11 + t02 * a12;
-  float sig_c = t11 * a11 + t12 * a12 + 0.3;
+  float sig_c = t11 * a11 + t12 * a12 + lpY;
 
   // -------------------------------------------------------------------------
   // Eigendecomposition of 2x2 symmetric Sigma_ndc
