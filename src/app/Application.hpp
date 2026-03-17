@@ -3,7 +3,7 @@
 #include "ui/FpsOverlay.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/MenuOverlay.hpp"
-#include "ui/ProgressModal.hpp"
+#include "ui/ProgressOverlay.hpp"
 #include "ui/Viewport3D.hpp"
 
 class Application {
@@ -25,6 +25,6 @@ private:
     MainWindow    m_window;
     FpsOverlay    m_fpsOverlay;
     MenuOverlay   m_menuOverlay;
-    ProgressModal m_progressModal;
+    ProgressOverlay m_progressOverlay;
     Viewport3D    m_viewport;
 };

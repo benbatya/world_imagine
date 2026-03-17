@@ -97,7 +97,7 @@ void Application::run() {
     // --- Draw UI ---
     m_viewport.draw(ctx, m_state);
     m_menuOverlay.draw(m_state);
-    m_progressModal.draw(m_state);
+    m_progressOverlay.draw(m_state);
     m_fpsOverlay.draw();
 
     // --- ImGui render ---
