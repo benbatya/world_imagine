@@ -100,8 +100,8 @@ void Application::run() {
     ImGui::NewFrame();
 
     // --- Draw UI ---
-    m_menuOverlay.draw(m_state);
     m_viewport.draw(ctx, m_state);
+    m_menuOverlay.draw(m_state);
 
     // --- ImGui render ---
     ImGui::Render();

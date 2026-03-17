@@ -35,8 +35,14 @@ void Viewport3D::renderOffscreen(VulkanContext& ctx, VkCommandBuffer cmd) {
 void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
   if (!m_initialized) return;
 
-  ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-  ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoScrollbar);
+  ImGuiIO& io = ImGui::GetIO();
+  ImGui::SetNextWindowPos(ImVec2(0, 0));
+  ImGui::SetNextWindowSize(io.DisplaySize);
+  constexpr ImGuiWindowFlags kFullscreenFlags =
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBringToFrontOnFocus |
+      ImGuiWindowFlags_NoNav;
+  ImGui::Begin("Viewport", nullptr, kFullscreenFlags);
 
   // If model changed, upload to GPU
   {
@@ -84,8 +90,6 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
 
   // Orbit controls (only when the image is hovered)
   if (ImGui::IsItemHovered()) {
-    ImGuiIO& io = ImGui::GetIO();
-
     if (io.MouseDown[0]) {
       m_camera.orbit(io.MouseDelta.x, io.MouseDelta.y);
     }
