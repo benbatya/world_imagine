@@ -494,7 +494,7 @@ void SplatRenderer::render(VulkanContext& ctx,
 
     // Cap draw count to avoid GPU context-switch timeout (Xid 109) on large models.
     // Splats are sorted back-to-front; draw the closest ones via firstVertex offset.
-    static constexpr size_t kMaxRenderSplats = 250'000;
+    static constexpr size_t kMaxRenderSplats = 1'250'000;
     size_t drawCount = std::min(m_splatCount, kMaxRenderSplats);
     uint32_t firstVert = static_cast<uint32_t>((m_splatCount - drawCount) * 6);
 
