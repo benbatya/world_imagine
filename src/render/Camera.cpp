@@ -1,32 +1,33 @@
 #include "Camera.hpp"
 
-Vec3 Camera::position() const {
-  float cosEl = std::cos(elevation);
-  float sinEl = std::sin(elevation);
-  float sinAz = std::sin(azimuth);
-  float cosAz = std::cos(azimuth);
-  return {
-    target.x + distance * cosEl * sinAz,
-    target.y + distance * sinEl,
-    target.z + distance * cosEl * cosAz,
-  };
+// Q = Ry(azimuth) * Rx(-elevation)
+// Rotating local +X/+Y/+Z by Q yields the camera's right/up/back axes in world space.
+Quat Camera::orientation() const {
+  return Quat::fromAxisAngle({0.f, 1.f, 0.f}, azimuth) *
+         Quat::fromAxisAngle({1.f, 0.f, 0.f}, -elevation);
 }
 
-// Column-major lookAt (Vulkan/OpenGL convention, camera looks into -Z in view space)
-Mat4 Camera::view() const {
-  Vec3 eye = position();
-  Vec3 f   = normalize3(target - eye);              // forward
-  Vec3 s   = normalize3(cross3(f, {0, 1, 0}));      // right
-  if (dot3(s, s) < 1e-6f) s = {1, 0, 0};           // degenerate guard (looking straight up)
-  Vec3 u = cross3(s, f);                             // corrected up
+Vec3 Camera::position() const {
+  return target + orientation().rotate({0.f, 0.f, distance});
+}
 
-  Mat4 m  = Mat4::identity();
-  // Row 0: right (s)
-  m(0, 0) = s.x; m(1, 0) = s.y; m(2, 0) = s.z; m(3, 0) = -dot3(s, eye);
-  // Row 1: up (u)
-  m(0, 1) = u.x; m(1, 1) = u.y; m(2, 1) = u.z; m(3, 1) = -dot3(u, eye);
-  // Row 2: -forward
-  m(0, 2) = -f.x; m(1, 2) = -f.y; m(2, 2) = -f.z; m(3, 2) = dot3(f, eye);
+// Column-major view matrix (Vulkan/OpenGL convention, camera looks into -Z in view space).
+// Basis vectors extracted directly from the orientation quaternion — no cross-product
+// degeneracy at the poles.
+Mat4 Camera::view() const {
+  Quat q     = orientation();
+  Vec3 right = q.rotate({1.f, 0.f, 0.f});
+  Vec3 up    = q.rotate({0.f, 1.f, 0.f});
+  Vec3 back  = q.rotate({0.f, 0.f, 1.f}); // target→eye direction (+Z camera-local)
+  Vec3 eye   = target + back * distance;
+
+  Mat4 m = Mat4::identity();
+  // Row 0: right
+  m(0, 0) = right.x; m(1, 0) = right.y; m(2, 0) = right.z; m(3, 0) = -dot3(right, eye);
+  // Row 1: up
+  m(0, 1) = up.x;    m(1, 1) = up.y;    m(2, 1) = up.z;    m(3, 1) = -dot3(up,    eye);
+  // Row 2: back (+Z local = -forward; no sign flip needed since back already points away)
+  m(0, 2) = back.x;  m(1, 2) = back.y;  m(2, 2) = back.z;  m(3, 2) = -dot3(back,  eye);
   // Row 3: homogeneous
   m(0, 3) = 0; m(1, 3) = 0; m(2, 3) = 0; m(3, 3) = 1;
   return m;
@@ -67,21 +68,14 @@ CameraUBO Camera::makeUBO(float aspect, float vpWidth, float vpHeight) const {
 void Camera::orbit(float dx, float dy) {
   azimuth   += dx * 0.005f;
   elevation += dy * 0.005f;
-  // Clamp elevation to avoid gimbal at poles
-  const float limit = 1.55f; // ~89°
-  if (elevation > limit) elevation = limit;
-  if (elevation < -limit) elevation = -limit;
 }
 
 void Camera::pan(float dx, float dy) {
-  Vec3 eye = position();
-  Vec3 f   = normalize3(target - eye);
-  Vec3 s   = normalize3(cross3(f, {0, 1, 0}));
-  if (dot3(s, s) < 1e-6f) s = {1, 0, 0};
-  Vec3 u = cross3(s, f);
-
+  Quat  q     = orientation();
+  Vec3  right = q.rotate({1.f, 0.f, 0.f});
+  Vec3  up    = q.rotate({0.f, 1.f, 0.f});
   float scale = distance * 0.001f;
-  target = target + (s * (-dx * scale)) + (u * (dy * scale));
+  target = target + (right * (-dx * scale)) + (up * (dy * scale));
 }
 
 void Camera::dolly(float delta) {
