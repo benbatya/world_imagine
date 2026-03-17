@@ -13,9 +13,8 @@ void Viewport3D::init(VulkanContext& ctx, uint32_t width, uint32_t height,
   m_renderer.init(ctx, width, height, shaderDir);
   m_initialized = true;
 
-  // Place camera to see a typical 3DGS scene
-  m_camera.azimuth   = 0.f;
-  m_camera.elevation = 0.2f;
+  // Place camera to see a typical 3DGS scene (azimuth=0, elevation≈0.2 rad)
+  m_camera.resetOrientation(0.f, 0.2f);
   m_camera.distance  = 3.f;
   m_camera.target    = {0, 0, 0};
 }

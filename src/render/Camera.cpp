@@ -1,13 +1,6 @@
 #include "Camera.hpp"
 #include <cmath>
 
-// Q = Ry(azimuth) * Rx(-elevation)
-// Rotating local +X/+Y/+Z by Q yields the camera's right/up/back axes in world space.
-glm::quat Camera::orientation() const {
-  return glm::angleAxis(azimuth,     glm::vec3{0.f, 1.f, 0.f}) *
-         glm::angleAxis(-elevation,  glm::vec3{1.f, 0.f, 0.f});
-}
-
 glm::vec3 Camera::position() const {
   return target + orientation() * glm::vec3{0.f, 0.f, distance};
 }
@@ -59,8 +52,11 @@ CameraUBO Camera::makeUBO(float aspect, float vpWidth, float vpHeight) const {
 }
 
 void Camera::orbit(float dx, float dy) {
-  azimuth   += dx * 0.005f;
-  elevation += dy * 0.005f;
+  // Horizontal drag: rotate around world Y (pre-multiply).
+  // Vertical drag: rotate around camera-local X (post-multiply).
+  glm::quat dAz = glm::angleAxis( dx * 0.005f, glm::vec3{0.f, 1.f, 0.f});
+  glm::quat dEl = glm::angleAxis(-dy * 0.005f, glm::vec3{1.f, 0.f, 0.f});
+  orientation_ = glm::normalize(dAz * orientation_ * dEl);
 }
 
 void Camera::pan(float dx, float dy) {
@@ -76,11 +72,16 @@ void Camera::dolly(float delta) {
   if (distance < 0.01f) distance = 0.01f;
 }
 
+void Camera::resetOrientation(float azimuth, float elevation) {
+  orientation_ = glm::normalize(glm::angleAxis(azimuth,    glm::vec3{0.f, 1.f, 0.f}) *
+                                glm::angleAxis(-elevation, glm::vec3{1.f, 0.f, 0.f}));
+}
+
 void Camera::fitToBounds(glm::vec3 center, float radius) {
   if (radius < 1e-4f) radius = 1.f;
   target   = center;
   distance = radius * 2.5f;
   zNear    = radius * 0.001f;
   zFar     = radius * 20.f;
-  // Keep current azimuth/elevation so the user's orientation is preserved on re-load
+  // Keep current orientation_ so the user's view direction is preserved on re-load
 }
