@@ -3,6 +3,7 @@
 #include "render/VulkanContext.hpp"
 #include "io/SplatIO.hpp"
 #include "model/GaussianModel.hpp"
+#include "util/AsyncJob.hpp"
 
 #include <GLFW/glfw3.h>
 #include <cstdio>
@@ -37,9 +38,10 @@ Application::Application(int argc, char* argv[]) {
   if (argc >= 2) {
     std::string path{argv[1]};
     try {
+      AsyncJob job;
       SplatIO io;
-      auto model = io.importPLY(path);
-      size_t n   = model->numSplats();
+      auto model = io.importPLY(path, job);
+      size_t n   = model ? model->numSplats() : 0;
       {
         std::lock_guard lock{m_state.gaussianMutex};
         m_state.gaussianModel = std::move(model);
@@ -109,6 +111,7 @@ void Application::run() {
     // --- Draw UI ---
     m_viewport.draw(ctx, m_state);
     m_menuOverlay.draw(m_state);
+    m_progressModal.draw(m_state);
     m_fpsOverlay.draw();
 
     // --- ImGui render ---

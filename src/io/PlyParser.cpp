@@ -1,6 +1,7 @@
 #include "PlyParser.hpp"
 
 #include "model/GaussianModel.hpp"
+#include "util/AsyncJob.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -178,130 +179,161 @@ static PlyHeader parseHeader(std::ifstream& f, std::streampos& dataStart) {
 }
 
 // ---------------------------------------------------------------------------
-// Load
+// Load (internal shared implementation)
 // ---------------------------------------------------------------------------
 
-std::shared_ptr<GaussianModel> PlyParser::load(const std::filesystem::path& path) {
-  std::ifstream f(path, std::ios::binary);
-  if (!f)
-    throw std::runtime_error("Cannot open: " + path.string());
+// job may be nullptr (synchronous path).  Returns nullptr if cancelled.
+static std::shared_ptr<GaussianModel> loadImpl(const std::filesystem::path& path,
+                                               AsyncJob*                    job) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f)
+        throw std::runtime_error("Cannot open: " + path.string());
 
-  std::streampos dataStart;
-  PlyHeader hdr = parseHeader(f, dataStart);
+    if (job)
+        job->setStatusText("Parsing header…");
 
-  if (hdr.numVertices <= 0)
-    throw std::runtime_error("PLY has no vertices");
+    std::streampos dataStart;
+    PlyHeader hdr = parseHeader(f, dataStart);
 
-  // Figure out SH layout
-  // f_dc_0/1/2 are DC (k=0); f_rest_* are higher degrees (k=1..)
-  // f_rest are stored as: first all R coefficients, then G, then B
-  int numRest = 0;
-  for (auto& p : hdr.props) {
-    if (p.name.rfind("f_rest_", 0) == 0)
-      ++numRest;
-  }
-  // numRest = 3*(K-1) where K = num_sh_bases
-  int numHigherBases = (numRest > 0 && numRest % 3 == 0) ? numRest / 3 : 0;
-  int numBases       = 1 + numHigherBases;
+    if (hdr.numVertices <= 0)
+        throw std::runtime_error("PLY has no vertices");
 
-  const int N = hdr.numVertices;
-
-  // Raw storage (we'll fill, then copy to tensors)
-  std::vector<float> positions(N * 3);
-  std::vector<float> scales(N * 3);
-  std::vector<float> rotations(N * 4);
-  std::vector<float> opacities(N);
-  std::vector<float> sh(N * numBases * 3, 0.f);
-
-  auto fillRow = [&](const char* elem, int i) {
-    positions[i * 3 + 0] = hdr.getFloat(elem, "x");
-    positions[i * 3 + 1] = hdr.getFloat(elem, "y");
-    positions[i * 3 + 2] = hdr.getFloat(elem, "z");
-
-    scales[i * 3 + 0] = hdr.getFloat(elem, "scale_0");
-    scales[i * 3 + 1] = hdr.getFloat(elem, "scale_1");
-    scales[i * 3 + 2] = hdr.getFloat(elem, "scale_2");
-
-    rotations[i * 4 + 0] = hdr.getFloat(elem, "rot_0");
-    rotations[i * 4 + 1] = hdr.getFloat(elem, "rot_1");
-    rotations[i * 4 + 2] = hdr.getFloat(elem, "rot_2");
-    rotations[i * 4 + 3] = hdr.getFloat(elem, "rot_3");
-
-    opacities[i] = hdr.getFloat(elem, "opacity");
-
-    // SH: sh[i * numBases*3 + k*3 + c]
-    // DC
-    sh[i * numBases * 3 + 0 * 3 + 0] = hdr.getFloat(elem, "f_dc_0");
-    sh[i * numBases * 3 + 0 * 3 + 1] = hdr.getFloat(elem, "f_dc_1");
-    sh[i * numBases * 3 + 0 * 3 + 2] = hdr.getFloat(elem, "f_dc_2");
-
-    // Higher SH: f_rest_{j} where j in [0, numHigherBases) → R channel, basis k=j+1
-    //            f_rest_{numHigherBases+j}                  → G channel
-    //            f_rest_{2*numHigherBases+j}                → B channel
-    for (int j = 0; j < numHigherBases; ++j) {
-      int k                            = j + 1;
-      sh[i * numBases * 3 + k * 3 + 0] = hdr.getFloat(elem, "f_rest_" + std::to_string(j));
-      sh[i * numBases * 3 + k * 3 + 1] =
-        hdr.getFloat(elem, "f_rest_" + std::to_string(numHigherBases + j));
-      sh[i * numBases * 3 + k * 3 + 2] =
-        hdr.getFloat(elem, "f_rest_" + std::to_string(2 * numHigherBases + j));
+    // Figure out SH layout
+    // f_dc_0/1/2 are DC (k=0); f_rest_* are higher degrees (k=1..)
+    // f_rest are stored as: first all R coefficients, then G, then B
+    int numRest = 0;
+    for (auto& p : hdr.props) {
+        if (p.name.rfind("f_rest_", 0) == 0)
+            ++numRest;
     }
-  };
+    // numRest = 3*(K-1) where K = num_sh_bases
+    int numHigherBases = (numRest > 0 && numRest % 3 == 0) ? numRest / 3 : 0;
+    int numBases       = 1 + numHigherBases;
 
-  if (hdr.format == PlyFormat::Ascii) {
-    std::string line;
-    for (int i = 0; i < N; ++i) {
-      if (!std::getline(f, line))
-        throw std::runtime_error("PLY: unexpected end of ASCII data");
-      if (!line.empty() && line.back() == '\r')
-        line.pop_back();
+    const int N = hdr.numVertices;
 
-      // Build a fake binary element from parsed tokens
-      std::istringstream ss(line);
-      std::vector<float> vals(hdr.props.size());
-      for (int j = 0; j < (int)hdr.props.size(); ++j) {
-        if (!(ss >> vals[j]))
-          throw std::runtime_error("PLY: malformed ASCII row at vertex " + std::to_string(i));
-      }
+    if (job)
+        job->setStatusText("Loading " + std::to_string(N) + " splats…");
 
-      // Re-use getFloat via a temporary binary buffer
-      std::vector<char> elemBuf(hdr.stride);
-      for (int j = 0; j < (int)hdr.props.size(); ++j) {
-        std::memcpy(elemBuf.data() + hdr.props[j].byteOffset, &vals[j], 4);
-        // Patch type to float so readFloat works correctly
-      }
-      // Temporarily treat all as float for ascii path
-      auto savedTypes = hdr.props;
-      for (auto& p : hdr.props)
-        p.type = "float";
-      fillRow(elemBuf.data(), i);
-      hdr.props = savedTypes;
+    // Raw storage (we'll fill, then copy to tensors)
+    std::vector<float> positions(N * 3);
+    std::vector<float> scales(N * 3);
+    std::vector<float> rotations(N * 4);
+    std::vector<float> opacities(N);
+    std::vector<float> sh(N * numBases * 3, 0.f);
+
+    auto fillRow = [&](const char* elem, int i) {
+        positions[i * 3 + 0] = hdr.getFloat(elem, "x");
+        positions[i * 3 + 1] = hdr.getFloat(elem, "y");
+        positions[i * 3 + 2] = hdr.getFloat(elem, "z");
+
+        scales[i * 3 + 0] = hdr.getFloat(elem, "scale_0");
+        scales[i * 3 + 1] = hdr.getFloat(elem, "scale_1");
+        scales[i * 3 + 2] = hdr.getFloat(elem, "scale_2");
+
+        rotations[i * 4 + 0] = hdr.getFloat(elem, "rot_0");
+        rotations[i * 4 + 1] = hdr.getFloat(elem, "rot_1");
+        rotations[i * 4 + 2] = hdr.getFloat(elem, "rot_2");
+        rotations[i * 4 + 3] = hdr.getFloat(elem, "rot_3");
+
+        opacities[i] = hdr.getFloat(elem, "opacity");
+
+        // SH: sh[i * numBases*3 + k*3 + c]
+        // DC
+        sh[i * numBases * 3 + 0 * 3 + 0] = hdr.getFloat(elem, "f_dc_0");
+        sh[i * numBases * 3 + 0 * 3 + 1] = hdr.getFloat(elem, "f_dc_1");
+        sh[i * numBases * 3 + 0 * 3 + 2] = hdr.getFloat(elem, "f_dc_2");
+
+        // Higher SH: f_rest_{j} where j in [0, numHigherBases) → R channel, basis k=j+1
+        //            f_rest_{numHigherBases+j}                  → G channel
+        //            f_rest_{2*numHigherBases+j}                → B channel
+        for (int j = 0; j < numHigherBases; ++j) {
+            int k                             = j + 1;
+            sh[i * numBases * 3 + k * 3 + 0] = hdr.getFloat(elem, "f_rest_" + std::to_string(j));
+            sh[i * numBases * 3 + k * 3 + 1] =
+                hdr.getFloat(elem, "f_rest_" + std::to_string(numHigherBases + j));
+            sh[i * numBases * 3 + k * 3 + 2] =
+                hdr.getFloat(elem, "f_rest_" + std::to_string(2 * numHigherBases + j));
+        }
+    };
+
+    // Report progress every kChunk rows (only meaningful for large binary files)
+    static constexpr int kChunk = 5000;
+
+    if (hdr.format == PlyFormat::Ascii) {
+        std::string line;
+        for (int i = 0; i < N; ++i) {
+            if (job && (i % kChunk == 0)) {
+                if (job->cancelRequested())
+                    return nullptr;
+                job->setProgress(static_cast<float>(i) / static_cast<float>(N));
+            }
+
+            if (!std::getline(f, line))
+                throw std::runtime_error("PLY: unexpected end of ASCII data");
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+
+            // Build a fake binary element from parsed tokens
+            std::istringstream ss(line);
+            std::vector<float> vals(hdr.props.size());
+            for (int j = 0; j < (int)hdr.props.size(); ++j) {
+                if (!(ss >> vals[j]))
+                    throw std::runtime_error("PLY: malformed ASCII row at vertex " +
+                                             std::to_string(i));
+            }
+
+            // Re-use getFloat via a temporary binary buffer
+            std::vector<char> elemBuf(hdr.stride);
+            for (int j = 0; j < (int)hdr.props.size(); ++j)
+                std::memcpy(elemBuf.data() + hdr.props[j].byteOffset, &vals[j], 4);
+
+            // Temporarily treat all as float for ascii path
+            auto savedTypes = hdr.props;
+            for (auto& p : hdr.props)
+                p.type = "float";
+            fillRow(elemBuf.data(), i);
+            hdr.props = savedTypes;
+        }
+    } else {
+        // Binary (big-endian swapping not implemented — 3DGS files are always LE)
+        if (hdr.format == PlyFormat::BinaryBE)
+            throw std::runtime_error("PLY: big-endian format not supported");
+
+        std::vector<char> elemBuf(hdr.stride);
+        for (int i = 0; i < N; ++i) {
+            if (job && (i % kChunk == 0)) {
+                if (job->cancelRequested())
+                    return nullptr;
+                job->setProgress(static_cast<float>(i) / static_cast<float>(N));
+            }
+
+            f.read(elemBuf.data(), hdr.stride);
+            if (!f)
+                throw std::runtime_error("PLY: unexpected end of binary data at vertex " +
+                                         std::to_string(i));
+            fillRow(elemBuf.data(), i);
+        }
     }
-  } else {
-    // Binary (big-endian swapping not implemented — 3DGS files are always LE)
-    if (hdr.format == PlyFormat::BinaryBE)
-      throw std::runtime_error("PLY: big-endian format not supported");
 
-    std::vector<char> elemBuf(hdr.stride);
-    for (int i = 0; i < N; ++i) {
-      f.read(elemBuf.data(), hdr.stride);
-      if (!f)
-        throw std::runtime_error("PLY: unexpected end of binary data at vertex " +
-                                 std::to_string(i));
-      fillRow(elemBuf.data(), i);
-    }
-  }
+    if (job)
+        job->setStatusText("Building tensors…");
 
-  auto model = std::make_shared<GaussianModel>();
-  auto opts  = torch::TensorOptions().dtype(torch::kFloat32);
+    auto model = std::make_shared<GaussianModel>();
+    auto opts  = torch::TensorOptions().dtype(torch::kFloat32);
 
-  model->positions = torch::from_blob(positions.data(), {N, 3}, opts).clone();
-  model->scales    = torch::from_blob(scales.data(), {N, 3}, opts).clone();
-  model->rotations = torch::from_blob(rotations.data(), {N, 4}, opts).clone();
-  model->opacities = torch::from_blob(opacities.data(), {N, 1}, opts).clone();
-  model->sh_coeffs = torch::from_blob(sh.data(), {N, numBases, 3}, opts).clone();
+    model->positions = torch::from_blob(positions.data(), {N, 3}, opts).clone();
+    model->scales    = torch::from_blob(scales.data(), {N, 3}, opts).clone();
+    model->rotations = torch::from_blob(rotations.data(), {N, 4}, opts).clone();
+    model->opacities = torch::from_blob(opacities.data(), {N, 1}, opts).clone();
+    model->sh_coeffs = torch::from_blob(sh.data(), {N, numBases, 3}, opts).clone();
 
-  return model;
+    return model;
+}
+
+std::shared_ptr<GaussianModel> PlyParser::loadAsync(const std::filesystem::path& path,
+                                                     AsyncJob&                    job) {
+    return loadImpl(path, &job);
 }
 
 // ---------------------------------------------------------------------------
