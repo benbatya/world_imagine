@@ -1,5 +1,5 @@
 #pragma once
-#include "Camera.hpp"
+#include "OrbitCamera.hpp"
 #include "GpuBuffer.hpp"
 #include "VulkanPipeline.hpp"
 #include <cstdint>
@@ -23,11 +23,11 @@ public:
   void destroy(VulkanContext& ctx);
 
   // Upload new splat data (depth-sorted by camera position). Call on main thread.
-  void uploadSplats(VulkanContext& ctx, const GaussianModel& model, const Camera& cam);
+  void uploadSplats(VulkanContext& ctx, const GaussianModel& model, const OrbitCamera& cam);
 
   // Record the offscreen render pass commands into cmd.
   // The offscreen color image starts and ends in SHADER_READ_ONLY_OPTIMAL.
-  void render(VulkanContext& ctx, VkCommandBuffer cmd, const Camera& cam,
+  void render(VulkanContext& ctx, VkCommandBuffer cmd, const OrbitCamera& cam,
               uint32_t width, uint32_t height);
 
   void resize(VulkanContext& ctx, uint32_t width, uint32_t height);

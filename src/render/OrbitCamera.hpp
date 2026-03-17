@@ -11,7 +11,7 @@ struct CameraUBO {
 };
 
 // Orbit camera. Rotation stored directly as a quaternion (world→camera orientation).
-class Camera {
+class OrbitCamera {
 public:
   float     distance{5.f};   // distance from target
   glm::vec3 target{0.f};

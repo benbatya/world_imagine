@@ -363,7 +363,7 @@ void SplatRenderer::resize(VulkanContext& ctx, uint32_t width, uint32_t height) 
 // ---------------------------------------------------------------------------
 void SplatRenderer::uploadSplats(VulkanContext& ctx,
                                  const GaussianModel& model,
-                                 const Camera& cam) {
+                                 const OrbitCamera& cam) {
   std::lock_guard lock{model.mutex};
 
   const size_t N = model.numSplats();
@@ -457,7 +457,7 @@ void SplatRenderer::uploadSplats(VulkanContext& ctx,
 // ---------------------------------------------------------------------------
 void SplatRenderer::render(VulkanContext& ctx,
                            VkCommandBuffer cmd,
-                           const Camera& cam,
+                           const OrbitCamera& cam,
                            uint32_t width,
                            uint32_t height) {
   // Update camera UBO every frame

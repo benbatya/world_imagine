@@ -1,14 +1,14 @@
-#include "Camera.hpp"
+#include "OrbitCamera.hpp"
 #include <cmath>
 
-glm::vec3 Camera::position() const {
+glm::vec3 OrbitCamera::position() const {
   return target + orientation() * glm::vec3{0.f, 0.f, distance};
 }
 
 // Column-major view matrix (Vulkan/OpenGL convention, camera looks into -Z in view space).
 // Basis vectors extracted directly from the orientation quaternion — no cross-product
 // degeneracy at the poles.
-glm::mat4 Camera::view() const {
+glm::mat4 OrbitCamera::view() const {
   glm::quat q     = orientation();
   glm::vec3 right = q * glm::vec3{1.f, 0.f, 0.f};
   glm::vec3 up    = q * glm::vec3{0.f, 1.f, 0.f};
@@ -29,7 +29,7 @@ glm::mat4 Camera::view() const {
 
 // Perspective projection: Vulkan convention (Y-flipped, depth [0,1]).
 // proj[1][1] is negative to flip Y, depth mapping: near→0, far→1.
-glm::mat4 Camera::proj(float aspect) const {
+glm::mat4 OrbitCamera::proj(float aspect) const {
   float f = 1.f / std::tan(fovY * 0.5f);
   float n = zNear, r = zFar;
 
@@ -42,7 +42,7 @@ glm::mat4 Camera::proj(float aspect) const {
   return m;
 }
 
-CameraUBO Camera::makeUBO(float aspect, float vpWidth, float vpHeight) const {
+CameraUBO OrbitCamera::makeUBO(float aspect, float vpWidth, float vpHeight) const {
   CameraUBO ubo;
   ubo.view     = view();
   ubo.proj     = proj(aspect);
@@ -51,7 +51,7 @@ CameraUBO Camera::makeUBO(float aspect, float vpWidth, float vpHeight) const {
   return ubo;
 }
 
-void Camera::orbit(float dx, float dy) {
+void OrbitCamera::orbit(float dx, float dy) {
   // Horizontal drag: rotate around world Y (pre-multiply).
   // Vertical drag: rotate around camera-local X (post-multiply).
   glm::quat dAz = glm::angleAxis( dx * 0.005f, glm::vec3{0.f, 1.f, 0.f});
@@ -59,7 +59,7 @@ void Camera::orbit(float dx, float dy) {
   orientation_ = glm::normalize(dAz * orientation_ * dEl);
 }
 
-void Camera::pan(float dx, float dy) {
+void OrbitCamera::pan(float dx, float dy) {
   glm::quat q     = orientation();
   glm::vec3 right = q * glm::vec3{1.f, 0.f, 0.f};
   glm::vec3 up    = q * glm::vec3{0.f, 1.f, 0.f};
@@ -67,17 +67,17 @@ void Camera::pan(float dx, float dy) {
   target += right * (-dx * scale) + up * (dy * scale);
 }
 
-void Camera::dolly(float delta) {
+void OrbitCamera::dolly(float delta) {
   distance *= (1.f - delta * 0.001f);
   if (distance < 0.01f) distance = 0.01f;
 }
 
-void Camera::resetOrientation(float azimuth, float elevation) {
+void OrbitCamera::resetOrientation(float azimuth, float elevation) {
   orientation_ = glm::normalize(glm::angleAxis(azimuth,    glm::vec3{0.f, 1.f, 0.f}) *
                                 glm::angleAxis(-elevation, glm::vec3{1.f, 0.f, 0.f}));
 }
 
-void Camera::fitToBounds(glm::vec3 center, float radius) {
+void OrbitCamera::fitToBounds(glm::vec3 center, float radius) {
   if (radius < 1e-4f) radius = 1.f;
   target   = center;
   distance = radius * 2.5f;

@@ -1,5 +1,5 @@
 #pragma once
-#include "render/Camera.hpp"
+#include "render/OrbitCamera.hpp"
 #include "render/SplatRenderer.hpp"
 #include <memory>
 #include <string>
@@ -9,7 +9,7 @@ class GaussianModel;
 struct VulkanContext;
 
 // ImGui panel that shows the 3D Gaussian splat scene.
-// Owns a SplatRenderer (offscreen Vulkan FBO) and a Camera (orbit controls).
+// Owns a SplatRenderer (offscreen Vulkan FBO) and an OrbitCamera (orbit controls).
 class Viewport3D {
 public:
   void init(VulkanContext& ctx, uint32_t width, uint32_t height,
@@ -24,7 +24,7 @@ public:
 
 private:
   SplatRenderer m_renderer;
-  Camera        m_camera;
+  OrbitCamera   m_camera;
 
   // Track last model pointer to detect changes
   std::shared_ptr<GaussianModel> m_lastModel;
