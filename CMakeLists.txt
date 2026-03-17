@@ -55,7 +55,18 @@ target_link_libraries(imgui PUBLIC glfw Vulkan::Vulkan)
 target_compile_options(imgui PRIVATE -w)
 
 # ---------------------------------------------------------------------------
-# 4. Vulkan Memory Allocator (header-only) — vendored via FetchContent
+# 4. GLM (header-only math library)
+# ---------------------------------------------------------------------------
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        1.0.3
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(glm)
+
+# ---------------------------------------------------------------------------
+# 5. Vulkan Memory Allocator (header-only) — vendored via FetchContent
 # ---------------------------------------------------------------------------
 FetchContent_Declare(
     vma
@@ -69,7 +80,7 @@ add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE ${vma_SOURCE_DIR}/include)
 
 # ---------------------------------------------------------------------------
-# 5. Native File Dialog Extended (NFDe) — system open/save dialogs
+# 6. Native File Dialog Extended (NFDe) — system open/save dialogs
 # ---------------------------------------------------------------------------
 FetchContent_Declare(
     nfd
@@ -81,7 +92,7 @@ set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(nfd)
 
 # ---------------------------------------------------------------------------
-# 6. SPIR-V shader compilation via glslangValidator (renumbered)
+# 7. SPIR-V shader compilation via glslangValidator
 # ---------------------------------------------------------------------------
 find_program(GLSLANG_VALIDATOR glslangValidator REQUIRED)
 
@@ -108,7 +119,7 @@ endforeach()
 add_custom_target(shaders ALL DEPENDS ${SPV_OUTPUTS})
 
 # ---------------------------------------------------------------------------
-# 7. Main executable
+# 8. Main executable
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
@@ -121,6 +132,7 @@ target_link_libraries(world_imagine PRIVATE
     vma
     nfd
     glfw
+    glm::glm
     Vulkan::Vulkan
     "${TORCH_LIBRARIES}"
 )

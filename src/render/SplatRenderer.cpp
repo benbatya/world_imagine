@@ -373,7 +373,7 @@ void SplatRenderer::uploadSplats(VulkanContext& ctx,
   }
 
   // Depth sort: back-to-front (descending distance = far-first for over blending)
-  Vec3 camPos = cam.position();
+  glm::vec3 camPos = cam.position();
   auto camPosTensor = torch::tensor({camPos.x, camPos.y, camPos.z});
   auto diffs  = model.positions - camPosTensor; // [N,3]
   auto depths = diffs.norm(2, 1);               // [N]
