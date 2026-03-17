@@ -82,6 +82,10 @@ void VulkanContext::destroy() {
     vkDestroyFence(device, f.inFlightFence, nullptr);
   }
   cleanupSwapchain();
+  if (renderPass) {
+    vkDestroyRenderPass(device, renderPass, nullptr);
+    renderPass = VK_NULL_HANDLE;
+  }
   vkDestroyDescriptorPool(device, descriptorPool, nullptr);
   vkDestroyCommandPool(device, commandPool, nullptr);
   vmaDestroyAllocator(allocator);
@@ -106,7 +110,7 @@ void VulkanContext::recreateSwapchain(int width, int height) {
   cleanupSwapchain();
   createSwapchain(width, height);
   createSwapchainImageViews();
-  createFramebuffers(); // render pass is reused, framebuffers need new image views
+  createFramebuffers();
 }
 
 // ---------------------------------------------------------------------------
@@ -473,11 +477,6 @@ void VulkanContext::cleanupSwapchain() {
   for (auto fb : framebuffers)
     vkDestroyFramebuffer(device, fb, nullptr);
   framebuffers.clear();
-
-  if (renderPass) {
-    vkDestroyRenderPass(device, renderPass, nullptr);
-    renderPass = VK_NULL_HANDLE;
-  }
 
   for (auto iv : swapchainImageViews)
     vkDestroyImageView(device, iv, nullptr);

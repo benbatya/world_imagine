@@ -6,7 +6,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/world_imagine",
-            "args": ["test_data/point_cloud.ply"],
+            "args": ["test_data/train_scene.ply"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [
