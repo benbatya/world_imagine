@@ -42,10 +42,6 @@ private:
   std::shared_ptr<GaussianModel> m_lastModel;
   size_t m_lastSplatCount{0};
 
-  // Track camera pose at last sort to trigger re-sort on significant movement
-  glm::vec3 m_lastSortCamPos{0.f};
-  glm::vec3 m_lastSortCamFwd{0.f, 0.f, -1.f};
-
   uint32_t m_vpWidth{800};
   uint32_t m_vpHeight{600};
   bool     m_initialized{false};

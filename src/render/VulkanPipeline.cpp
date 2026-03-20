@@ -40,8 +40,9 @@ void VulkanPipeline::create(VulkanContext& ctx,
 
   // --- Descriptor set layout ---
   // Binding 0: CameraUBO (uniform buffer, vertex stage)
-  // Binding 1: SplatSSBO (storage buffer, vertex stage)
-  VkDescriptorSetLayoutBinding bindings[2]{};
+  // Binding 1: SplatSSBO (storage buffer, vertex stage) — unsorted source data
+  // Binding 2: IndexSSBO (storage buffer, vertex stage) — sorted index buffer
+  VkDescriptorSetLayoutBinding bindings[3]{};
   bindings[0].binding         = 0;
   bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -52,8 +53,13 @@ void VulkanPipeline::create(VulkanContext& ctx,
   bindings[1].descriptorCount = 1;
   bindings[1].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
 
+  bindings[2].binding         = 2;
+  bindings[2].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  bindings[2].descriptorCount = 1;
+  bindings[2].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT;
+
   VkDescriptorSetLayoutCreateInfo dslCI{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-  dslCI.bindingCount = 2;
+  dslCI.bindingCount = 3;
   dslCI.pBindings    = bindings;
   if (vkCreateDescriptorSetLayout(device, &dslCI, nullptr, &descriptorSetLayout) != VK_SUCCESS)
     throw std::runtime_error("VulkanPipeline: vkCreateDescriptorSetLayout failed");

@@ -50,7 +50,9 @@ world_imagine/
 │       ├── ThreadPool.hpp/.cpp
 │       └── Logger.hpp/.cpp
 └── shaders/
-    ├── splat.vert.glsl / splat.frag.glsl   # compiled to SPIR-V at build time
+    ├── splat.vert.glsl / splat.frag.glsl       # graphics pipeline, compiled to SPIR-V
+    ├── sort_depth.comp.glsl                     # compute: depth calc + index init
+    ├── sort_bitonic.comp.glsl                   # compute: bitonic merge sort
     └── point.vert.glsl / point.frag.glsl
 ```
 
@@ -270,35 +272,44 @@ private:
 ```cpp
 class SplatRenderer {
 public:
-    void init(VulkanContext& ctx);
-    void uploadSplats(const GaussianModel& model);
-    void render(const Camera& cam, int viewportW, int viewportH);
-    void resize(int w, int h);
-    VkDescriptorSet getOutputDescriptorSet() const;  // ImGui::Image handle
+    void init(VulkanContext& ctx, uint32_t w, uint32_t h, const std::string& shaderDir);
+    void destroy(VulkanContext& ctx);
+    void uploadSplatData(VulkanContext& ctx, const GaussianModel& model);
+    void render(VulkanContext& ctx, VkCommandBuffer cmd, const CameraUBO& ubo,
+                uint32_t w, uint32_t h);
+    void resize(VulkanContext& ctx, uint32_t w, uint32_t h);
+    VkDescriptorSet outputDescriptorSet() const;
 
 private:
     // Offscreen render targets
-    VkImage        m_colorImage;
-    VkImageView    m_colorView;
-    VmaAllocation  m_colorAlloc;
-    VkImage        m_depthImage;
-    VkImageView    m_depthView;
-    VmaAllocation  m_depthAlloc;
-    VkSampler      m_sampler;
+    VkImage m_colorImage; VkImageView m_colorView; VmaAllocation m_colorAlloc;
+    VkImage m_depthImage; VkImageView m_depthView; VmaAllocation m_depthAlloc;
+    VkSampler m_sampler;  VkRenderPass m_renderPass;  VkFramebuffer m_framebuffer;
+    VkDescriptorSet m_imguiTexDescSet;
 
-    VkRenderPass         m_renderPass;
-    VkFramebuffer        m_framebuffer;
-    VkDescriptorSet      m_imguiTexDescSet;  // registered with ImGui_ImplVulkan
+    // Splat data (unsorted source + sort buffers)
+    GpuBuffer m_srcSplatBuf;   // [N * 14 floats] device-local
+    GpuBuffer m_depthKeyBuf;   // [N_padded floats] view-space depths
+    GpuBuffer m_indexBuf;      // [N_padded uint32] sorted indices
+    size_t    m_splatCount{0};
+    size_t    m_splatCountPadded{0};
 
-    // Splat geometry
-    VkBuffer       m_vertexBuffer;
-    VmaAllocation  m_vertexAlloc;
-    VkBuffer       m_stagingBuffer;
-    VmaAllocation  m_stagingAlloc;
+    // Camera UBO (persistently mapped)
+    GpuBuffer m_cameraUBOBuf;  void* m_cameraUBOMapped{nullptr};
 
-    VulkanPipeline m_pipeline;
-    size_t         m_splatCount{0};
-    bool           m_dirty{true};
+    // Graphics pipeline + descriptors
+    VulkanPipeline   m_pipeline;
+    VkDescriptorPool m_descriptorPool;
+    VkDescriptorSet  m_descriptorSet;
+
+    // Compute pipelines for GPU depth sort
+    VkPipeline m_depthCompPipeline;  VkPipelineLayout m_depthCompLayout;
+    VkDescriptorSetLayout m_depthCompDSLayout;  VkDescriptorSet m_depthCompDS;
+    VkPipeline m_sortCompPipeline;   VkPipelineLayout m_sortCompLayout;
+    VkDescriptorSetLayout m_sortCompDSLayout;   VkDescriptorSet m_sortCompDS;
+
+    void gpuSort(VkCommandBuffer cmd, glm::vec3 camPos, glm::vec3 camFwd);
+    // ... helpers for offscreen images, render pass, descriptors, compute setup
 };
 ```
 
@@ -391,28 +402,132 @@ Pipeline blend state: `srcColorBlendFactor = VK_BLEND_FACTOR_ONE`, `dstColorBlen
 
 ### Splat Data Upload
 
-Splat geometry is stored in a `VkBuffer` with `VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT` (device-local via VMA `VMA_MEMORY_USAGE_GPU_ONLY`). Upload uses a CPU-visible staging buffer:
+Unsorted splat data (14 floats/splat) is uploaded to a device-local SSBO
+(`m_srcSplatBuf`) via a staging buffer on model load or incremental growth.
+No sorting occurs during upload — sorting is handled per-frame by the GPU
+compute pipeline (see **GPU Depth Sorting** above).
 
 ```cpp
-// On main thread after pipeline completes:
-auto flat = model.toVertexBuffer();
-// memcpy into staging buffer (VMA_MEMORY_USAGE_CPU_TO_GPU)
-// vkCmdCopyBuffer(cmdBuf, stagingBuf, vertexBuf, ...)
-// pipeline barrier: transfer → vertex shader read
+// SplatRenderer::uploadSplatData() — called on model load/growth only:
+// 1. Pack model tensors into std::vector<float> in original order
+// 2. Allocate/resize m_srcSplatBuf, m_depthKeyBuf, m_indexBuf
+// 3. Stage via mapped GpuBuffer → vkCmdCopyBuffer → barrier (transfer → compute)
 ```
 
-### Depth Sorting
+### GPU Depth Sorting (Compute Shader)
 
-Sort splats by distance to camera before each upload using torch:
+Depth sorting runs entirely on the GPU via Vulkan compute shaders, using an
+**index-buffer indirection** approach. Unsorted splat data is uploaded once
+(on model load/growth) into a source SSBO. Each frame, two compute passes
+produce a sorted index buffer that the vertex shader reads via indirection.
+
+#### Data Layout
+
+| Buffer | Contents | Size | Lifetime |
+|--------|----------|------|----------|
+| `m_srcSplatBuf` | Unsorted splat data (14 floats/splat) | N × 56 bytes | Model load/growth |
+| `m_depthKeyBuf` | View-space depth per splat | N_padded × 4 bytes | Per-frame (overwritten) |
+| `m_indexBuf` | Sorted splat indices | N_padded × 4 bytes | Per-frame (overwritten) |
+
+`N_padded` = next power of 2 ≥ N (required by bitonic sort). Padding elements
+get depth = −FLT_MAX so they sort to the tail in descending order and are
+never drawn (the `firstVertex` offset skips them).
+
+#### Pass 1: Depth Computation (`sort_depth.comp.glsl`)
+
+Workgroup size 256, dispatched as `ceil(N_padded / 256)` groups.
+
+```
+depth[i] = dot(position[i] − camPos, camFwd)    // signed view-space depth
+index[i] = i                                      // identity permutation
+```
+
+Push constants carry `camPos`, `camFwd`, `splatCount`, and `paddedCount`.
+Camera position and forward direction are extracted from the `CameraUBO`
+view matrix each frame in `SplatRenderer::render()`:
 
 ```cpp
-auto depths = (positions - cam_pos).norm(2, 1);
-auto sorted_idx = depths.argsort(0, /*descending=*/true);
-auto sorted_positions = positions.index_select(0, sorted_idx);
-// repeat for scales, rotations, opacities, sh_coeffs
+camFwd = -vec3(view[0][2], view[1][2], view[2][2])  // negated 3rd column
 ```
 
-Fast for ≤500k splats. For larger scenes, run sort on a background thread and double-buffer the vertex `VkBuffer` with a fence-guarded swap.
+#### Pass 2: Bitonic Merge Sort (`sort_bitonic.comp.glsl`)
+
+A **bitonic sort** permutes the depth-key and index arrays in-place into
+descending order (back-to-front for alpha blending).
+
+**Algorithm**: Bitonic sort is a comparison-based sorting network that works
+in O(n log²n) comparisons. It proceeds through nested loops of increasing
+block size `k` and decreasing comparison distance `j`:
+
+```
+for k = 2, 4, 8, … , N_padded:        // outer: block size doubles
+  for j = k/2, k/4, … , 1:            // inner: comparison distance halves
+    for each element i in parallel:
+      partner = i XOR j
+      if partner > i:                  // only lower-index thread swaps
+        if should_swap(i, partner):    // descending within block
+          swap(depth[i], depth[partner])
+          swap(index[i], index[partner])
+```
+
+Each `(k, j)` pair is one compute dispatch of `ceil(N_padded / 256)` workgroups.
+A memory barrier (`VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT` → `COMPUTE`) separates
+each dispatch to ensure the previous pass is visible.
+
+For N_padded = 2^21 (~2M splats), total passes = 21 × 22 / 2 = **231 dispatches**.
+
+Push constants carry `k`, `j`, and `paddedCount` (12 bytes).
+
+#### Vertex Shader Indirection
+
+The vertex shader reads the sorted index to look up splat data:
+
+```glsl
+layout(set = 0, binding = 1) readonly buffer SplatSSBO { float data[]; } splats;
+layout(set = 0, binding = 2) readonly buffer IndexSSBO { uint sortedIndices[]; } indices;
+
+int vertIdx  = gl_VertexIndex / 6;
+int splatIdx = int(indices.sortedIndices[vertIdx]);  // indirection
+int base     = splatIdx * 14;
+// read splats.data[base + 0..13] as before
+```
+
+#### Synchronization
+
+All compute and graphics work is recorded into the same per-frame command buffer:
+
+```
+[COMPUTE] depth dispatch
+    → barrier (compute write → compute read/write)
+[COMPUTE] bitonic sort dispatches (with barrier between each pass)
+    → barrier (compute write → vertex shader read)
+[GRAPHICS] render pass (reads m_srcSplatBuf + m_indexBuf)
+```
+
+No cross-queue transfers or additional fences needed. The existing per-frame
+fences handle inter-frame synchronization.
+
+#### Performance Characteristics
+
+- **Zero CPU–GPU transfer on camera movement** — the source SSBO is written
+  once; only the 4–8 MB index+depth buffers are touched per frame, entirely
+  on GPU.
+- **Sort runs every frame** — no 5°/0.1-unit threshold; always correct.
+- The `firstVertex` offset still caps rendering at 1.25M closest splats to
+  avoid GPU context-switch timeouts on very large models.
+
+#### Descriptor Sets
+
+| Set | Binding | Buffer | Pipeline |
+|-----|---------|--------|----------|
+| Graphics 0 | 0 | CameraUBO | Vertex |
+| Graphics 0 | 1 | m_srcSplatBuf (unsorted) | Vertex |
+| Graphics 0 | 2 | m_indexBuf (sorted indices) | Vertex |
+| Depth Compute 0 | 0 | m_srcSplatBuf | Compute |
+| Depth Compute 0 | 1 | m_depthKeyBuf | Compute |
+| Depth Compute 0 | 2 | m_indexBuf | Compute |
+| Sort Compute 0 | 0 | m_depthKeyBuf | Compute |
+| Sort Compute 0 | 1 | m_indexBuf | Compute |
 
 ### Camera System
 
@@ -431,7 +546,7 @@ struct CameraUBO {
 };
 ```
 
-`Viewport3D::draw()` calls `activeCamera.makeUBO(aspect, w, h)` and stores the result in `m_currentUBO`. `renderOffscreen()` passes it directly to `SplatRenderer::render()`, which memcpys it into the persistently-mapped UBO buffer each frame. `SplatRenderer::uploadSplats()` takes `glm::vec3 camPos` for depth-sorting — extracted from the active camera's `position()`.
+`Viewport3D::draw()` calls `activeCamera.makeUBO(aspect, w, h)` and stores the result in `m_currentUBO`. `renderOffscreen()` passes it directly to `SplatRenderer::render()`, which memcpys it into the persistently-mapped UBO buffer each frame. Camera position and forward direction for GPU depth sorting are extracted from the UBO view matrix inside `render()` — no camera parameters are passed from `Viewport3D`.
 
 #### OrbitCamera (`src/render/OrbitCamera.hpp/.cpp`)
 
@@ -536,11 +651,12 @@ std::atomic<size_t> committedSplatCount{0};
 bool isNewModel = current && current != m_lastModel;
 bool hasGrown   = current == m_lastModel && committedCount > m_lastSplatCount;
 ```
-- `isNewModel` → auto-fit camera (quantile bounding box) + upload splats.
-- `hasGrown` → upload splats only; camera is **not** re-fit, so the user can
+- `isNewModel` → auto-fit camera (quantile bounding box) + upload unsorted splat data.
+- `hasGrown` → upload splat data only; camera is **not** re-fit, so the user can
   orbit freely while loading continues.
-- Both paths call `m_renderer.uploadSplats()`, which acquires `model->mutex`
-  internally before reading the tensors.
+- Both paths call `m_renderer.uploadSplatData()`, which acquires `model->mutex`
+  internally before reading the tensors. Depth sorting is handled per-frame
+  by the GPU compute pipeline — no camera-movement re-sort threshold is needed.
 
 **Thread-safety summary:**
 
@@ -595,7 +711,7 @@ the main thread.
 ### Phase 6 — Export and Polish
 24. Implement `exportPLY` and `exportSPZ`; wire "Export Splats"
 25. Add error modal: show `ImGui::OpenPopup("Error")` when `AsyncJob::exception()` is set
-26. Move depth sort to a background thread with double-buffered `VkBuffer` (fence-guarded swap) for large scenes
+26. ~~Move depth sort to a background thread~~ **Done**: GPU compute shader bitonic sort runs every frame with zero CPU involvement (see GPU Depth Sorting section)
 27. Add cancel support: pipeline checks `AsyncJob::cancelRequested()` between stages
 
 ---

@@ -20,6 +20,10 @@ layout(set = 0, binding = 1) readonly buffer SplatSSBO {
   float data[];
 } splats;
 
+layout(set = 0, binding = 2) readonly buffer IndexSSBO {
+  uint sortedIndices[];
+} indices;
+
 // ---------------------------------------------------------------------------
 // Outputs
 // ---------------------------------------------------------------------------
@@ -57,8 +61,11 @@ const vec2 kCorners[6] = vec2[6](
 // main
 // ---------------------------------------------------------------------------
 void main() {
-  int splatIdx = gl_VertexIndex / 6;
+  int vertIdx  = gl_VertexIndex / 6;
   int corner   = gl_VertexIndex % 6;
+
+  // Indirection: look up actual splat index from sorted index buffer
+  int splatIdx = int(indices.sortedIndices[vertIdx]);
 
   // Unpack splat data
   int   base    = splatIdx * 14;
