@@ -101,10 +101,11 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
 
   // Orbit controls (only when the image is hovered)
   if (ImGui::IsItemHovered()) {
-    if (io.MouseDown[0]) {
+    // Left mouse button saved for selection and manipulation
+    if (io.MouseDown[1]) {
       m_camera.orbit(io.MouseDelta.x, io.MouseDelta.y);
     }
-    if (io.MouseDown[1] || io.MouseDown[2]) {
+    if (io.MouseDown[2]) {
       m_camera.pan(io.MouseDelta.x, io.MouseDelta.y);
     }
     if (io.MouseWheel != 0.f) {
