@@ -411,6 +411,58 @@ auto sorted_positions = positions.index_select(0, sorted_idx);
 
 Fast for ≤500k splats. For larger scenes, run sort on a background thread and double-buffer the vertex `VkBuffer` with a fence-guarded swap.
 
+### Incremental Splat Display During Load
+
+PLY files are parsed and displayed incrementally so the user sees splats appear
+as they load rather than waiting for the full file.
+
+**How it works:**
+
+`PlyParser::loadAsync` accepts an optional `SplatBatchCallback`:
+```cpp
+using SplatBatchCallback = std::function<void(std::shared_ptr<GaussianModel>, size_t count)>;
+```
+Inside the parse loop, every `kBatchSize = 25000` rows (and at the final row),
+a `commitBatch(count)` helper clones the first `count` entries from the raw
+float vectors into a reused `GaussianModel` under `model->mutex`, then invokes
+the callback.  The same `shared_ptr<GaussianModel>` is passed on every call —
+tensors are replaced in-place, so the pointer published to `AppState` never
+changes during a single load.  When a callback is registered the final return
+value is that reused model (no second tensor allocation).
+
+`SplatIO::loadAsync` constructs the callback and wires it to `AppState`:
+- **First batch**: acquires `gaussianMutex`, sets `state.gaussianModel = partial`.
+  This is the only time the pointer changes.
+- **Every batch**: stores `count` into `state.committedSplatCount` (atomic
+  release-store) so `Viewport3D` can detect growth without locking.
+
+`AppState` gains one field:
+```cpp
+std::atomic<size_t> committedSplatCount{0};
+```
+
+`Viewport3D::draw` checks both new-model and growth conditions each frame:
+```cpp
+bool isNewModel = current && current != m_lastModel;
+bool hasGrown   = current == m_lastModel && committedCount > m_lastSplatCount;
+```
+- `isNewModel` → auto-fit camera (quantile bounding box) + upload splats.
+- `hasGrown` → upload splats only; camera is **not** re-fit, so the user can
+  orbit freely while loading continues.
+- Both paths call `m_renderer.uploadSplats()`, which acquires `model->mutex`
+  internally before reading the tensors.
+
+**Thread-safety summary:**
+
+| Shared state | Writer | Reader | Guard |
+|---|---|---|---|
+| `model->positions` etc. | parser thread (`commitBatch`) | main thread (`uploadSplats`) | `model->mutex` |
+| `state.gaussianModel` (ptr) | parser thread (first batch only) | main thread | `state.gaussianMutex` |
+| `state.committedSplatCount` | parser thread (each batch) | main thread | `std::atomic` |
+
+No Vulkan calls are made from the background thread; all GPU work remains on
+the main thread.
+
 ---
 
 ## Implementation Phases
@@ -441,6 +493,7 @@ Fast for ≤500k splats. For larger scenes, run sort on a background thread and 
 16. Implement `AsyncJob` with atomics
 17. Implement `ProgressModal` that polls `AsyncJob`
 18. Implement pipeline `std::jthread` wiring in `VideoImporter`
+
 
 ### Phase 5 — Video Pipeline
 19. Implement `FrameExtractor` using FFmpeg C API; test on `raw_camera/VID_20260309_111720.mp4`
