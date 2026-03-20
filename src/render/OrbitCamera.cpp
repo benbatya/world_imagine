@@ -55,7 +55,7 @@ void OrbitCamera::orbit(float dx, float dy) {
   // Horizontal drag: rotate around world Y (pre-multiply).
   // Vertical drag: rotate around camera-local X (post-multiply).
   glm::quat dAz = glm::angleAxis( dx * 0.005f, glm::vec3{0.f, 1.f, 0.f});
-  glm::quat dEl = glm::angleAxis(-dy * 0.005f, glm::vec3{1.f, 0.f, 0.f});
+  glm::quat dEl = glm::angleAxis( dy * 0.005f, glm::vec3{1.f, 0.f, 0.f});
   orientation_ = glm::normalize(dAz * orientation_ * dEl);
 }
 
@@ -64,7 +64,7 @@ void OrbitCamera::pan(float dx, float dy) {
   glm::vec3 right = q * glm::vec3{1.f, 0.f, 0.f};
   glm::vec3 up    = q * glm::vec3{0.f, 1.f, 0.f};
   float     scale = distance * 0.001f;
-  target += right * (-dx * scale) + up * (dy * scale);
+  target += right * (dx * scale) + up * (dy * scale);
 }
 
 void OrbitCamera::dolly(float delta) {
@@ -81,7 +81,7 @@ void OrbitCamera::roll(float dr) {
 
 void OrbitCamera::moveKeyboard(float fwd, float rgt, float upv, float dt) {
   // Dolly: move along the target-to-eye axis (scale by distance for feel consistency).
-  distance -= fwd * moveSpeed * dt;
+  distance += fwd * moveSpeed * dt;
   if (distance < 0.01f) distance = 0.01f;
 
   // Strafe/up: translate target along camera-local right and world up.

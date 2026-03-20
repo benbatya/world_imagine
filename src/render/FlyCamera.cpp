@@ -46,8 +46,8 @@ CameraUBO FlyCamera::makeUBO(float aspect, float vpWidth, float vpHeight) const 
 // Controls
 // ---------------------------------------------------------------------------
 void FlyCamera::look(float dx, float dy) {
-    glm::quat yawQ   = glm::angleAxis(-dx * kLookSens, glm::vec3{0.f, 1.f, 0.f});
-    glm::quat pitchQ = glm::angleAxis(-dy * kLookSens, right());
+    glm::quat yawQ   = glm::angleAxis(dx * kLookSens, glm::vec3{0.f, 1.f, 0.f});
+    glm::quat pitchQ = glm::angleAxis(dy * kLookSens, right());
     orientation_ = glm::normalize(pitchQ * yawQ * orientation_);
 }
 
@@ -63,7 +63,7 @@ void FlyCamera::move(float fwd, float rgt, float upv, float dt) {
 }
 
 void FlyCamera::pan(float dx, float dy) {
-    position_ -= right() * (dx * kPanScale * moveSpeed_);
+    position_ += right() * (dx * kPanScale * moveSpeed_);
     position_ += up()    * (dy * kPanScale * moveSpeed_);
 }
 

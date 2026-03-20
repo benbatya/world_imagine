@@ -118,20 +118,20 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
         if (mode == CameraMode::Orbit) {
             // Mouse controls — LMB reserved for selection
             if (io.MouseDown[1])
-                m_camera.orbit(io.MouseDelta.x, io.MouseDelta.y);
+                m_camera.orbit(-io.MouseDelta.x, -io.MouseDelta.y);
             if (io.MouseDown[2])
-                m_camera.pan(io.MouseDelta.x, io.MouseDelta.y);
+                m_camera.pan(-io.MouseDelta.x, io.MouseDelta.y);
             if (io.MouseWheel != 0.f)
-                m_camera.dolly(-io.MouseWheel * 80.f);
+                m_camera.dolly(io.MouseWheel * 80.f);
 
             // Arrow keys — orbit azimuth / elevation
             {
                 float kArrow = 200.f * dt;
                 float adx = 0.f, ady = 0.f;
-                if (ImGui::IsKeyDown(ImGuiKey_LeftArrow))  adx -= kArrow;
-                if (ImGui::IsKeyDown(ImGuiKey_RightArrow)) adx += kArrow;
-                if (ImGui::IsKeyDown(ImGuiKey_UpArrow))    ady -= kArrow;
-                if (ImGui::IsKeyDown(ImGuiKey_DownArrow))  ady += kArrow;
+                if (ImGui::IsKeyDown(ImGuiKey_LeftArrow))  adx += kArrow;
+                if (ImGui::IsKeyDown(ImGuiKey_RightArrow)) adx -= kArrow;
+                if (ImGui::IsKeyDown(ImGuiKey_UpArrow))    ady += kArrow;
+                if (ImGui::IsKeyDown(ImGuiKey_DownArrow))  ady -= kArrow;
                 if (adx != 0.f || ady != 0.f)
                     m_camera.orbit(adx, ady);
             }
@@ -139,8 +139,8 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
             // WASD — dolly / strafe; Q/E — up / down
             {
                 float fwd = 0.f, rgt = 0.f, upv = 0.f;
-                if (ImGui::IsKeyDown(ImGuiKey_W)) fwd += 1.f;
-                if (ImGui::IsKeyDown(ImGuiKey_S)) fwd -= 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_W)) fwd -= 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_S)) fwd += 1.f;
                 if (ImGui::IsKeyDown(ImGuiKey_A)) rgt -= 1.f;
                 if (ImGui::IsKeyDown(ImGuiKey_D)) rgt += 1.f;
                 if (ImGui::IsKeyDown(ImGuiKey_Q)) upv += 1.f;
@@ -173,7 +173,7 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
 
             // MMB drag — pan (lateral translate)
             if (io.MouseDown[2])
-                m_flyCamera.pan(io.MouseDelta.x, io.MouseDelta.y);
+                m_flyCamera.pan(-io.MouseDelta.x, io.MouseDelta.y);
 
             // Arrow keys — look
             {
