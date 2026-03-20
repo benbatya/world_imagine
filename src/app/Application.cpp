@@ -40,6 +40,9 @@ Application::Application(int argc, char* argv[]) {
 }
 
 Application::~Application() {
+  // Stop any in-flight load before m_state is destroyed.
+  SplatIO::instance().cancelAndJoin();
+
   auto& ctx = m_window.vkCtx();
   vkDeviceWaitIdle(ctx.device);
   m_viewport.destroy(ctx);

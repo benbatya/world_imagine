@@ -31,6 +31,10 @@ public:
     // --- Cancel ---
     void requestCancel();
 
+    // Cancels any in-progress load and blocks until the thread exits.
+    // Call before destroying the AppState the load was started with.
+    void cancelAndJoin();
+
     // --- Completion handling ---
     // If the job is done, handles the result (sets error status if exception),
     // resets internal state, and returns true. Otherwise returns false.

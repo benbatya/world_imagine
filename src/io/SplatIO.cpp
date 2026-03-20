@@ -82,6 +82,12 @@ void SplatIO::requestCancel() {
         m_job->requestCancel();
 }
 
+void SplatIO::cancelAndJoin() {
+    requestCancel();
+    m_thread.reset(); // jthread destructor joins
+    m_job.reset();
+}
+
 bool SplatIO::finalize(AppState& state) {
     if (!m_job || !m_job->isDone())
         return false;
