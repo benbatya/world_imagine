@@ -454,8 +454,13 @@ Controls wired in `Viewport3D` (Orbit mode, viewport hovered):
 | Input | Action |
 |-------|--------|
 | RMB drag | Orbit |
+| Arrow keys | Orbit (200 px/s equivalent) |
+| R / F | Roll left / right |
 | MMB drag | Pan |
 | Scroll | Dolly |
+| WASD | Dolly / strafe |
+| Q / E | Move up / down |
+| `=` / `-` | Speed × 1.2 / ÷ 1.2 |
 
 #### FlyCamera (`src/render/FlyCamera.hpp/.cpp`)
 
@@ -485,11 +490,11 @@ Controls wired in `Viewport3D` (Fly mode, viewport hovered):
 |-------|--------|
 | RMB drag | Look (yaw + pitch) |
 | Arrow keys | Look (200 px/s equivalent) |
-| WASD | Move forward/back/strafe |
-| MMB drag | Pan (lateral + vertical) |
-| Q / E | Move up / down |
 | R / F | Roll left / right |
+| MMB drag | Pan (lateral + vertical) |
 | Scroll | Dolly along forward |
+| WASD | Dolly / strafe |
+| Q / E | Move up / down |
 | `=` / `-` | Speed × 1.2 / ÷ 1.2 |
 
 **Mode switching**: when `cameraMode` changes from Orbit → Fly, `Viewport3D` calls `m_flyCamera.setFromOrbit(m_camera)` so the view does not snap. Switching back to Orbit leaves the `OrbitCamera` state untouched.

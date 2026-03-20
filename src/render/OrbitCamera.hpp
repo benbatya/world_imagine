@@ -13,12 +13,7 @@ struct CameraUBO {
 // Orbit camera. Rotation stored directly as a quaternion (world→camera orientation).
 class OrbitCamera {
 public:
-  float     distance{5.f};   // distance from target
-  glm::vec3 target{0.f};
-
-  float fovY{0.7854f}; // 45° in radians
-  float zNear{0.01f};
-  float zFar{500.f};
+  OrbitCamera();
 
   glm::vec3 position() const;
   glm::mat4 view() const;
@@ -41,8 +36,11 @@ public:
 
   void adjustSpeed(float factor) { moveSpeed = std::max(0.01f, moveSpeed * factor); }
 
-  // Set orientation from explicit azimuth/elevation angles (radians).
-  void resetOrientation(float azimuth, float elevation);
+  // Set the pose of the camera
+  void set(const glm::vec3& position, const glm::quat& orientation);
+
+  // Restore default pose: target=origin, distance=5, elevation=0.3 rad, moveSpeed=2.
+  void reset();
 
   // Reset camera to frame a bounding box defined by its center and radius.
   // Positions the camera at 2.5× the radius away, facing the center.
@@ -52,7 +50,15 @@ public:
   glm::quat orientation() const { return orientation_; }
 
 private:
+
+  float     distance_;   // distance from target
+  glm::vec3 target_;
+
+  float fovY_{0.7854f}; // 45° in radians
+  float zNear_{0.01f};
+  float zFar_{500.f};
+
   // Q = Ry(azimuth) * Rx(-elevation) at construction (azimuth=0, elevation=0.3 rad).
   // Updated incrementally by orbit(); world-space orientation of the camera.
-  glm::quat orientation_{glm::angleAxis(-0.3f, glm::vec3{1.f, 0.f, 0.f})};
+  glm::quat orientation_;
 };

@@ -1,5 +1,6 @@
 #pragma once
 #include "AppState.hpp"
+#include "ui/ControlsOverlay.hpp"
 #include "ui/FpsOverlay.hpp"
 #include "ui/MainWindow.hpp"
 #include "ui/MenuOverlay.hpp"
@@ -23,6 +24,7 @@ private:
 
     AppState      m_state;
     MainWindow    m_window;
+    ControlsOverlay m_controlsOverlay;
     FpsOverlay    m_fpsOverlay;
     MenuOverlay   m_menuOverlay;
     ProgressOverlay m_progressOverlay;

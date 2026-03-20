@@ -15,9 +15,7 @@
 //   = / -                  — multiply moveSpeed by 1.2× / 0.83×
 class FlyCamera {
 public:
-    float fovY{0.7854f};  // 45°
-    float zNear{0.01f};
-    float zFar{500.f};
+    FlyCamera();
 
     glm::vec3 position() const { return position_; }
     glm::quat orientation() const { return orientation_; }
@@ -46,11 +44,19 @@ public:
     void adjustSpeed(float factor) { moveSpeed_ = std::max(0.01f, moveSpeed_ * factor); }
 
     // Initialise from an OrbitCamera so the view doesn't snap on mode switch.
-    void setFromOrbit(const OrbitCamera& orbit);
+    void set(const glm::vec3& position, const glm::quat& orientation);
+
+    // Restore default pose: position=(0,0,3), identity orientation, moveSpeed=2.
+    void reset();
 
 private:
-    glm::vec3 position_{0.f, 0.f, 3.f};
-    glm::quat orientation_{1.f, 0.f, 0.f, 0.f};  // identity
+
+    float fovY_{0.7854f};  // 45°
+    float zNear_{0.01f};
+    float zFar_{500.f};
+
+    glm::vec3 position_;
+    glm::quat orientation_; 
     float     moveSpeed_{2.0f};
 
     static constexpr float kLookSens{0.003f};

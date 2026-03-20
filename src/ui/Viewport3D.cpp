@@ -12,10 +12,12 @@ void Viewport3D::init(VulkanContext& ctx, uint32_t width, uint32_t height,
     m_renderer.init(ctx, width, height, shaderDir);
     m_initialized = true;
 
-    // Place camera to see a typical 3DGS scene (azimuth=0, elevation≈0.2 rad)
-    m_camera.resetOrientation(0.f, 0.2f);
-    m_camera.distance = 3.f;
-    m_camera.target   = {0, 0, 0};
+    resetCameras();
+}
+
+void Viewport3D::resetCameras() {
+    m_camera.reset();
+    m_flyCamera.reset();
 }
 
 void Viewport3D::destroy(VulkanContext& ctx) {
@@ -47,7 +49,9 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
     // Detect camera mode switch and sync fly camera from orbit on Orbit→Fly transition.
     if (mode != m_prevMode) {
         if (mode == CameraMode::Fly)
-            m_flyCamera.setFromOrbit(m_camera);
+            m_flyCamera.set(m_camera.position(), m_camera.orientation());
+        else 
+            m_camera.set(m_flyCamera.position(), m_flyCamera.orientation());
         m_prevMode = mode;
     }
 

@@ -24,6 +24,9 @@ public:
   // Draw the ImGui window (call inside ImGui frame).
   void draw(VulkanContext& ctx, AppState& state);
 
+  // Reset both cameras to their default poses.
+  void resetCameras();
+
 private:
   SplatRenderer m_renderer;
   OrbitCamera   m_camera;

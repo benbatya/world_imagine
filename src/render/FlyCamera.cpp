@@ -3,6 +3,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+FlyCamera::FlyCamera() {
+    reset();
+}
+
 // ---------------------------------------------------------------------------
 // Local axis helpers
 // ---------------------------------------------------------------------------
@@ -28,7 +32,7 @@ glm::mat4 FlyCamera::view() const {
 }
 
 glm::mat4 FlyCamera::proj(float aspect) const {
-    glm::mat4 p  = glm::perspective(fovY, aspect, zNear, zFar);
+    glm::mat4 p  = glm::perspective(fovY_, aspect, zNear_, zFar_);
     p[1][1] *= -1.f;  // Vulkan Y-flip
     return p;
 }
@@ -74,7 +78,15 @@ void FlyCamera::dolly(float ticks) {
 // ---------------------------------------------------------------------------
 // Sync from orbit
 // ---------------------------------------------------------------------------
-void FlyCamera::setFromOrbit(const OrbitCamera& orbit) {
-    position_    = orbit.position();
-    orientation_ = orbit.orientation();
+void FlyCamera::set(const glm::vec3& position, const glm::quat& orientation) {
+    position_    = position;
+  orientation_ = glm::normalize(orientation);
+}
+
+// TODO: OrbitCamera::fitToBounds changes the default distance and target. 
+// These should be preserved and used inside reset()
+void FlyCamera::reset() {
+    position_    = {0.f, 0.f, 5.f};
+    orientation_ = {1.f, 0.f, 0.f, 0.f};
+    moveSpeed_   = 2.f;
 }
