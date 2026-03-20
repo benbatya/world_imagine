@@ -22,8 +22,9 @@ public:
             const std::string& shaderDir);
   void destroy(VulkanContext& ctx);
 
-  // Upload new splat data (depth-sorted by camPos). Call on main thread.
-  void uploadSplats(VulkanContext& ctx, const GaussianModel& model, glm::vec3 camPos);
+  // Upload new splat data (depth-sorted along camFwd). Call on main thread.
+  void uploadSplats(VulkanContext& ctx, const GaussianModel& model, glm::vec3 camPos,
+                    glm::vec3 camFwd);
 
   // Record the offscreen render pass commands into cmd.
   // The offscreen color image starts and ends in SHADER_READ_ONLY_OPTIMAL.

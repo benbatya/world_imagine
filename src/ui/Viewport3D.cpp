@@ -97,8 +97,30 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
 
             glm::vec3 camPos = (mode == CameraMode::Orbit) ? m_camera.position()
                                                             : m_flyCamera.position();
-            m_renderer.uploadSplats(ctx, *current, camPos);
+            glm::quat camOri = (mode == CameraMode::Orbit) ? m_camera.orientation()
+                                                            : m_flyCamera.orientation();
+            glm::vec3 camFwd = camOri * glm::vec3(0.f, 0.f, -1.f);
+            m_renderer.uploadSplats(ctx, *current, camPos, camFwd);
+            m_lastSortCamPos = camPos;
+            m_lastSortCamFwd = camFwd;
             state.setStatus("Splats on GPU: " + std::to_string(committedCount));
+        } else if (current && current->numSplats() > 0) {
+            // Re-sort when camera has moved significantly
+            glm::vec3 camPos = (mode == CameraMode::Orbit) ? m_camera.position()
+                                                            : m_flyCamera.position();
+            glm::quat camOri = (mode == CameraMode::Orbit) ? m_camera.orientation()
+                                                            : m_flyCamera.orientation();
+            glm::vec3 camFwd = camOri * glm::vec3(0.f, 0.f, -1.f);
+
+            float angleCos = glm::dot(camFwd, m_lastSortCamFwd);
+            float posDist  = glm::length(camPos - m_lastSortCamPos);
+
+            // Re-sort if view direction changed >5° or position moved significantly
+            if (angleCos < 0.996f || posDist > 0.1f) {
+                m_renderer.uploadSplats(ctx, *current, camPos, camFwd);
+                m_lastSortCamPos = camPos;
+                m_lastSortCamFwd = camFwd;
+            }
         }
     }
 

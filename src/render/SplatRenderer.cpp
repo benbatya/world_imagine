@@ -363,7 +363,7 @@ void SplatRenderer::resize(VulkanContext& ctx, uint32_t width, uint32_t height) 
 // ---------------------------------------------------------------------------
 void SplatRenderer::uploadSplats(VulkanContext& ctx,
                                  const GaussianModel& model,
-                                 glm::vec3 camPos) {
+                                 glm::vec3 camPos, glm::vec3 camFwd) {
   std::lock_guard lock{model.mutex};
 
   const size_t N = model.numSplats();
@@ -372,11 +372,12 @@ void SplatRenderer::uploadSplats(VulkanContext& ctx,
     return;
   }
 
-  // Depth sort: back-to-front (descending distance = far-first for over blending)
+  // Depth sort: back-to-front by view-space Z (dot product with view direction)
   auto camPosTensor = torch::tensor({camPos.x, camPos.y, camPos.z});
-  auto diffs  = model.positions - camPosTensor; // [N,3]
-  auto depths = diffs.norm(2, 1);               // [N]
-  auto idx    = depths.argsort(0, /*descending=*/true);
+  auto camFwdTensor = torch::tensor({camFwd.x, camFwd.y, camFwd.z});
+  auto diffs  = model.positions - camPosTensor;       // [N,3]
+  auto depths = (diffs * camFwdTensor).sum(1);         // [N] signed view-depth
+  auto idx    = depths.argsort(0, /*descending=*/true); // far-first for over blending
 
   auto sortedPos = model.positions.index_select(0, idx).contiguous().cpu();
   auto sortedSc  = model.scales.index_select(0, idx).contiguous().cpu();
