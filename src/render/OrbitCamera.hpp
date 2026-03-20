@@ -26,10 +26,20 @@ public:
 
   CameraUBO makeUBO(float aspect, float vpWidth = 0.f, float vpHeight = 0.f) const;
 
+  float moveSpeed{2.0f};
+
   // Orbit: dx/dy are pixel deltas
   void orbit(float dx, float dy);
   void pan(float dx, float dy);
   void dolly(float delta);
+
+  // Roll around the camera-local back axis (target→eye).
+  void roll(float dr);
+
+  // Keyboard movement: fwd dolly, rgt/upv pan target. Scaled by moveSpeed * dt.
+  void moveKeyboard(float fwd, float rgt, float upv, float dt);
+
+  void adjustSpeed(float factor) { moveSpeed = std::max(0.01f, moveSpeed * factor); }
 
   // Set orientation from explicit azimuth/elevation angles (radians).
   void resetOrientation(float azimuth, float elevation);

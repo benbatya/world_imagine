@@ -72,6 +72,24 @@ void OrbitCamera::dolly(float delta) {
   if (distance < 0.01f) distance = 0.01f;
 }
 
+void OrbitCamera::roll(float dr) {
+  // Rotate around the back axis (target→eye direction, +Z in camera-local space).
+  glm::vec3 back  = orientation_ * glm::vec3{0.f, 0.f, 1.f};
+  glm::quat rollQ = glm::angleAxis(dr * 0.02f, back);
+  orientation_    = glm::normalize(rollQ * orientation_);
+}
+
+void OrbitCamera::moveKeyboard(float fwd, float rgt, float upv, float dt) {
+  // Dolly: move along the target-to-eye axis (scale by distance for feel consistency).
+  distance -= fwd * moveSpeed * dt;
+  if (distance < 0.01f) distance = 0.01f;
+
+  // Strafe/up: translate target along camera-local right and world up.
+  glm::vec3 right  = orientation_ * glm::vec3{1.f, 0.f, 0.f};
+  float     scale  = moveSpeed * dt;
+  target += right * (rgt * scale) + glm::vec3{0.f, 1.f, 0.f} * (upv * scale);
+}
+
 void OrbitCamera::resetOrientation(float azimuth, float elevation) {
   orientation_ = glm::normalize(glm::angleAxis(azimuth,    glm::vec3{0.f, 1.f, 0.f}) *
                                 glm::angleAxis(-elevation, glm::vec3{1.f, 0.f, 0.f}));

@@ -116,13 +116,53 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
         float dt = io.DeltaTime;
 
         if (mode == CameraMode::Orbit) {
-            // Left mouse button saved for selection and manipulation
+            // Mouse controls — LMB reserved for selection
             if (io.MouseDown[1])
                 m_camera.orbit(io.MouseDelta.x, io.MouseDelta.y);
             if (io.MouseDown[2])
                 m_camera.pan(io.MouseDelta.x, io.MouseDelta.y);
             if (io.MouseWheel != 0.f)
                 m_camera.dolly(-io.MouseWheel * 80.f);
+
+            // Arrow keys — orbit azimuth / elevation
+            {
+                float kArrow = 200.f * dt;
+                float adx = 0.f, ady = 0.f;
+                if (ImGui::IsKeyDown(ImGuiKey_LeftArrow))  adx -= kArrow;
+                if (ImGui::IsKeyDown(ImGuiKey_RightArrow)) adx += kArrow;
+                if (ImGui::IsKeyDown(ImGuiKey_UpArrow))    ady -= kArrow;
+                if (ImGui::IsKeyDown(ImGuiKey_DownArrow))  ady += kArrow;
+                if (adx != 0.f || ady != 0.f)
+                    m_camera.orbit(adx, ady);
+            }
+
+            // WASD — dolly / strafe; Q/E — up / down
+            {
+                float fwd = 0.f, rgt = 0.f, upv = 0.f;
+                if (ImGui::IsKeyDown(ImGuiKey_W)) fwd += 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_S)) fwd -= 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_A)) rgt -= 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_D)) rgt += 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_Q)) upv += 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_E)) upv -= 1.f;
+                if (fwd != 0.f || rgt != 0.f || upv != 0.f)
+                    m_camera.moveKeyboard(fwd, rgt, upv, dt);
+            }
+
+            // R / F — roll
+            {
+                float rollDir = 0.f;
+                if (ImGui::IsKeyDown(ImGuiKey_R)) rollDir += 1.f;
+                if (ImGui::IsKeyDown(ImGuiKey_F)) rollDir -= 1.f;
+                if (rollDir != 0.f)
+                    m_camera.roll(rollDir);
+            }
+
+            // = / - — adjust move speed
+            if (ImGui::IsKeyPressed(ImGuiKey_Equal))
+                m_camera.adjustSpeed(1.2f);
+            if (ImGui::IsKeyPressed(ImGuiKey_Minus))
+                m_camera.adjustSpeed(1.f / 1.2f);
 
         } else {
             // ---- Fly camera ----
