@@ -2,6 +2,7 @@
 
 #include "render/VulkanContext.hpp"
 #include "io/SplatIO.hpp"
+#include "pipeline/VideoImporter.hpp"
 
 #include <GLFW/glfw3.h>
 #include <cstdio>
@@ -40,8 +41,9 @@ Application::Application(int argc, char* argv[]) {
 }
 
 Application::~Application() {
-  // Stop any in-flight load before m_state is destroyed.
+  // Stop any in-flight jobs before m_state is destroyed.
   SplatIO::instance().cancelAndJoin();
+  VideoImporter::instance().cancelAndJoin();
 
   auto& ctx = m_window.vkCtx();
   vkDeviceWaitIdle(ctx.device);

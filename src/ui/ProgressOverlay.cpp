@@ -2,59 +2,69 @@
 
 #include "app/AppState.hpp"
 #include "io/SplatIO.hpp"
+#include "pipeline/VideoImporter.hpp"
 
 #include <imgui.h>
 #include <string>
 
 void ProgressOverlay::draw(AppState& state) {
-  auto& io = SplatIO::instance();
+    auto& sio = SplatIO::instance();
+    auto& vim = VideoImporter::instance();
 
-  if (!io.isLoading() && !io.isDone())
-    return;
+    // Pick the active source (at most one should be active at a time)
+    bool sioActive = sio.isLoading() || sio.isDone();
+    bool vimActive = vim.isLoading() || vim.isDone();
 
-  // Anchor a full-width bar to the bottom of the main viewport
-  ImGuiViewport* vp        = ImGui::GetMainViewport();
-  constexpr float k_width = 400.f;
-  constexpr float k_height = 52.f;
-  ImGui::SetNextWindowPos({vp->Pos.x, vp->Pos.y + vp->Size.y - k_height}, ImGuiCond_Always);
-  ImGui::SetNextWindowSize({k_width, k_height}, ImGuiCond_Always);
-  ImGui::SetNextWindowBgAlpha(0.82f);
+    if (!sioActive && !vimActive)
+        return;
 
-  ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-                           ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                           ImGuiWindowFlags_AlwaysAutoResize;
+    // Aliases to whichever source is active
+    float       progress   = vimActive ? vim.progress()   : sio.progress();
+    std::string statusTxt  = vimActive ? vim.statusText() : sio.statusText();
+    auto        doCancel   = [&]() { vimActive ? vim.requestCancel() : sio.requestCancel(); };
+    auto        doFinalize = [&]() { vimActive ? vim.finalize(state) : sio.finalize(state); };
 
-  ImGui::Begin("##progress_overlay", nullptr, flags);
+    // Anchor a fixed bar to the bottom-left of the main viewport
+    ImGuiViewport* vp        = ImGui::GetMainViewport();
+    constexpr float k_width  = 400.f;
+    constexpr float k_height = 52.f;
+    ImGui::SetNextWindowPos({vp->Pos.x, vp->Pos.y + vp->Size.y - k_height}, ImGuiCond_Always);
+    ImGui::SetNextWindowSize({k_width, k_height}, ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.82f);
 
-  // Status text (left column)
-  std::string txt = io.statusText();
-  ImGui::SetNextItemWidth(200.f);
-  ImGui::AlignTextToFramePadding();
-  if (!txt.empty())
-    ImGui::TextUnformatted(txt.c_str());
-  else
-    ImGui::TextDisabled("Working…");
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                             ImGuiWindowFlags_AlwaysAutoResize;
 
-  ImGui::SameLine();
+    ImGui::Begin("##progress_overlay", nullptr, flags);
 
-  // Progress bar (stretches to fill space before the cancel button)
-  float btnW    = 80.f;
-  float spacing = ImGui::GetStyle().ItemSpacing.x;
-  float barW    = ImGui::GetContentRegionAvail().x - btnW - spacing;
-  float p       = io.progress();
-  char overlay[32];
-  std::snprintf(overlay, sizeof(overlay), p > 0.f ? "%.0f%%" : "…", p * 100.f);
-  ImGui::ProgressBar(p, {barW, 0.f}, overlay);
+    // Status text (left column)
+    ImGui::SetNextItemWidth(200.f);
+    ImGui::AlignTextToFramePadding();
+    if (!statusTxt.empty())
+        ImGui::TextUnformatted(statusTxt.c_str());
+    else
+        ImGui::TextDisabled("Working…");
 
-  ImGui::SameLine();
+    ImGui::SameLine();
 
-  // Cancel button
-  if (ImGui::Button("Cancel", {btnW, 0.f}))
-    io.requestCancel();
+    // Progress bar
+    float btnW    = 80.f;
+    float spacing = ImGui::GetStyle().ItemSpacing.x;
+    float barW    = ImGui::GetContentRegionAvail().x - btnW - spacing;
+    char overlay[32];
+    std::snprintf(overlay, sizeof(overlay), progress > 0.f ? "%.0f%%" : "…", progress * 100.f);
+    ImGui::ProgressBar(progress, {barW, 0.f}, overlay);
 
-  // Auto-dismiss once the job reports done
-  if (io.isDone())
-    io.finalize(state);
+    ImGui::SameLine();
 
-  ImGui::End();
+    // Cancel button
+    if (ImGui::Button("Cancel", {btnW, 0.f}))
+        doCancel();
+
+    // Auto-dismiss once the job reports done
+    if ((vimActive && vim.isDone()) || (sioActive && sio.isDone()))
+        doFinalize();
+
+    ImGui::End();
 }

@@ -3,6 +3,7 @@
 #include "app/AppState.hpp"
 #include "io/SplatIO.hpp"
 #include "model/GaussianModel.hpp"
+#include "pipeline/VideoImporter.hpp"
 
 #include <imgui.h>
 #include <nfd.h>
@@ -41,21 +42,28 @@ void MenuOverlay::draw(AppState& state) {
     ImGui::TextDisabled("  World Imagine  ");
     ImGui::Separator();
 
-    const bool jobRunning = SplatIO::instance().isLoading();
+    const bool jobRunning = SplatIO::instance().isLoading() ||
+                            VideoImporter::instance().isLoading();
 
-    if (ImGui::MenuItem("Import Video")) {
-        state.setStatus("Import Video: not yet implemented (Phase 5)");
-    }
-
-    // Disable import while a job is already in flight
+    // Disable all imports while any job is in flight
     if (jobRunning)
         ImGui::BeginDisabled();
+
+    if (ImGui::MenuItem("Import Video")) {
+        nfdchar_t*      outPath = nullptr;
+        nfdfilteritem_t filters[1] = {{"Video files", "mp4,avi,mov,mkv"}};
+        nfdresult_t     result     = NFD_OpenDialog(&outPath, filters, 1, nullptr);
+        if (result == NFD_OKAY) {
+            std::string path{outPath};
+            NFD_FreePath(outPath);
+            VideoImporter::instance().importAsync(path, state);
+        }
+    }
 
     if (ImGui::MenuItem("Import Splats")) {
         nfdchar_t*      outPath = nullptr;
         nfdfilteritem_t filters[1] = {{"PLY files", "ply"}};
         nfdresult_t     result     = NFD_OpenDialog(&outPath, filters, 1, nullptr);
-
         if (result == NFD_OKAY) {
             std::string path{outPath};
             NFD_FreePath(outPath);

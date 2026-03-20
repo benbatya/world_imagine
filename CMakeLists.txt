@@ -80,7 +80,23 @@ add_library(vma INTERFACE)
 target_include_directories(vma INTERFACE ${vma_SOURCE_DIR}/include)
 
 # ---------------------------------------------------------------------------
-# 6. Native File Dialog Extended (NFDe) — system open/save dialogs
+# 6. FFmpeg (frame extraction from video)
+# ---------------------------------------------------------------------------
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFMPEG REQUIRED
+    libavcodec
+    libavformat
+    libswscale
+    libavutil
+)
+
+# ---------------------------------------------------------------------------
+# 6a. OpenCV (JPEG frame writing)
+# ---------------------------------------------------------------------------
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+
+# ---------------------------------------------------------------------------
+# 7. Native File Dialog Extended (NFDe) — system open/save dialogs
 # ---------------------------------------------------------------------------
 FetchContent_Declare(
     nfd
@@ -127,6 +143,11 @@ add_executable(world_imagine ${SOURCES})
 add_dependencies(world_imagine shaders)
 
 target_include_directories(world_imagine PRIVATE src)
+target_include_directories(world_imagine PRIVATE
+    ${FFMPEG_INCLUDE_DIRS}
+    ${OpenCV_INCLUDE_DIRS}
+)
+
 target_link_libraries(world_imagine PRIVATE
     imgui
     vma
@@ -135,4 +156,6 @@ target_link_libraries(world_imagine PRIVATE
     glm::glm
     Vulkan::Vulkan
     "${TORCH_LIBRARIES}"
+    ${FFMPEG_LIBRARIES}
+    ${OpenCV_LIBS}
 )
