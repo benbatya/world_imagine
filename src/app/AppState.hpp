@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -11,6 +12,11 @@ struct AppState {
     // Write only from the main thread (or under gaussianMutex from bg thread).
     std::shared_ptr<GaussianModel> gaussianModel;
     std::mutex gaussianMutex;
+
+    // Number of splats committed to gaussianModel so far.
+    // Written by the background load thread (atomic); read by Viewport3D each
+    // frame to detect mid-load growth without locking gaussianMutex.
+    std::atomic<size_t> committedSplatCount{0};
 
     // Status bar text (safe to write from any thread)
     std::string statusMessage{"Ready"};

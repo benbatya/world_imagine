@@ -24,7 +24,21 @@ void SplatIO::loadAsync(const std::filesystem::path& path, AppState& state) {
         std::shared_ptr<GaussianModel> model;
         try {
             PlyParser parser;
-            model = parser.loadAsync(path, *job);
+
+            // Publish each batch to AppState so Viewport3D can display splats
+            // incrementally.  firstBatch is set on the stack of this thread only.
+            bool firstBatch = true;
+            auto onBatch    = [&](std::shared_ptr<GaussianModel> partial, size_t count) {
+                if (firstBatch) {
+                    firstBatch = false;
+                    std::lock_guard lock{state.gaussianMutex};
+                    state.gaussianModel = partial;
+                }
+                // Release-store so Viewport3D acquire-loads the new count.
+                state.committedSplatCount.store(count, std::memory_order_release);
+            };
+
+            model = parser.loadAsync(path, *job, std::move(onBatch));
         } catch (...) {
             job->markDone(std::current_exception());
             return;
@@ -34,8 +48,9 @@ void SplatIO::loadAsync(const std::filesystem::path& path, AppState& state) {
             size_t n = model->numSplats();
             {
                 std::lock_guard lock{state.gaussianMutex};
-                state.gaussianModel = std::move(model);
+                state.gaussianModel = model; // same pointer as partial; harmless reassign
             }
+            state.committedSplatCount.store(n, std::memory_order_release);
             state.setStatus("Loaded " + std::to_string(n) + " splats");
         } else {
             state.setStatus("Import cancelled");

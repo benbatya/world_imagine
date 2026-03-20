@@ -26,8 +26,9 @@ private:
   SplatRenderer m_renderer;
   OrbitCamera   m_camera;
 
-  // Track last model pointer to detect changes
+  // Track last model pointer and splat count to detect new model or mid-load growth
   std::shared_ptr<GaussianModel> m_lastModel;
+  size_t m_lastSplatCount{0};
 
   uint32_t m_vpWidth{800};
   uint32_t m_vpHeight{600};

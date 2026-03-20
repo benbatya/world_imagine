@@ -43,40 +43,46 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
       ImGuiWindowFlags_NoNav;
   ImGui::Begin("Viewport", nullptr, kFullscreenFlags);
 
-  // If model changed, upload to GPU
+  // Upload to GPU when model is new or has grown (incremental load)
   {
+    // Cheap atomic read — no lock needed for the count check.
+    size_t committedCount = state.committedSplatCount.load(std::memory_order_acquire);
+
     std::shared_ptr<GaussianModel> current;
     {
       std::lock_guard lock{state.gaussianMutex};
       current = state.gaussianModel;
     }
-    if (current && current != m_lastModel) {
-      m_lastModel = current;
 
-      // Auto-fit camera using 5th/95th percentile splat positions to ignore
-      // outliers that would otherwise inflate a pure min/max bounding box.
-      if (current->numSplats() > 0 && current->positions.defined()) {
-        std::lock_guard posLock{current->mutex};
-        auto pos = current->positions.cpu(); // [N, 3]
+    bool isNewModel = current && current != m_lastModel;
+    bool hasGrown   = current && current == m_lastModel && committedCount > m_lastSplatCount;
 
-        // torch::quantile(input, q, dim) → shape [3] (one value per axis)
-        auto q05 = torch::quantile(pos, 0.05, 0); // [3] 5th-percentile per axis
-        auto q95 = torch::quantile(pos, 0.95, 0); // [3] 95th-percentile per axis
+    if (isNewModel || hasGrown) {
+      if (isNewModel) {
+        m_lastModel = current;
 
-        glm::vec3 bmin{q05[0].item<float>(), q05[1].item<float>(), q05[2].item<float>()};
-        glm::vec3 bmax{q95[0].item<float>(), q95[1].item<float>(), q95[2].item<float>()};
+        // Auto-fit camera once on first load — not on every incremental batch,
+        // since the user may already be orbiting.
+        if (current->numSplats() > 0 && current->positions.defined()) {
+          std::lock_guard posLock{current->mutex};
+          auto pos = current->positions.cpu(); // [N, 3]
 
-        // Center = midpoint of the percentile box
-        glm::vec3 center = (bmin + bmax) * 0.5f;
+          auto q05 = torch::quantile(pos, 0.05, 0);
+          auto q95 = torch::quantile(pos, 0.95, 0);
 
-        // Radius = half the diagonal of the percentile box
-        glm::vec3 ext    = bmax - bmin;
-        float     radius = glm::length(ext) * 0.5f;
-        m_camera.fitToBounds(center, radius);
+          glm::vec3 bmin{q05[0].item<float>(), q05[1].item<float>(), q05[2].item<float>()};
+          glm::vec3 bmax{q95[0].item<float>(), q95[1].item<float>(), q95[2].item<float>()};
+
+          glm::vec3 center = (bmin + bmax) * 0.5f;
+          glm::vec3 ext    = bmax - bmin;
+          float     radius = glm::length(ext) * 0.5f;
+          m_camera.fitToBounds(center, radius);
+        }
       }
 
+      m_lastSplatCount = committedCount;
       m_renderer.uploadSplats(ctx, *current, m_camera);
-      state.setStatus("Splats uploaded: " + std::to_string(current->numSplats()));
+      state.setStatus("Splats on GPU: " + std::to_string(committedCount));
     }
   }
 

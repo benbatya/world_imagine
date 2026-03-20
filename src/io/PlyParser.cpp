@@ -184,7 +184,8 @@ static PlyHeader parseHeader(std::ifstream& f, std::streampos& dataStart) {
 
 // job may be nullptr (synchronous path).  Returns nullptr if cancelled.
 static std::shared_ptr<GaussianModel> loadImpl(const std::filesystem::path& path,
-                                               AsyncJob*                    job) {
+                                               AsyncJob*            job,
+                                               SplatBatchCallback   onBatch) {
     std::ifstream f(path, std::ios::binary);
     if (!f)
         throw std::runtime_error("Cannot open: " + path.string());
@@ -257,8 +258,35 @@ static std::shared_ptr<GaussianModel> loadImpl(const std::filesystem::path& path
         }
     };
 
-    // Report progress every kChunk rows (only meaningful for large binary files)
-    static constexpr int kChunk = 5000;
+    // Report progress every kChunk rows; publish a partial GPU-ready model every kBatchSize rows.
+    static constexpr int kChunk     = 5000;
+    static constexpr int kBatchSize = 25000;
+
+    // Reused partial model — tensors replaced in-place under its mutex each batch.
+    std::shared_ptr<GaussianModel> partialModel;
+    auto opts = torch::TensorOptions().dtype(torch::kFloat32);
+
+    // Clone the first `count` splats from the raw vectors into partialModel.
+    auto commitBatch = [&](int count) {
+        if (!onBatch)
+            return;
+        if (!partialModel)
+            partialModel = std::make_shared<GaussianModel>();
+        {
+            std::lock_guard lock{partialModel->mutex};
+            partialModel->positions =
+                torch::from_blob(positions.data(), {count, 3}, opts).clone();
+            partialModel->scales =
+                torch::from_blob(scales.data(), {count, 3}, opts).clone();
+            partialModel->rotations =
+                torch::from_blob(rotations.data(), {count, 4}, opts).clone();
+            partialModel->opacities =
+                torch::from_blob(opacities.data(), {count, 1}, opts).clone();
+            partialModel->sh_coeffs =
+                torch::from_blob(sh.data(), {count, numBases, 3}, opts).clone();
+        }
+        onBatch(partialModel, static_cast<size_t>(count));
+    };
 
     if (hdr.format == PlyFormat::Ascii) {
         std::string line;
@@ -294,6 +322,9 @@ static std::shared_ptr<GaussianModel> loadImpl(const std::filesystem::path& path
                 p.type = "float";
             fillRow(elemBuf.data(), i);
             hdr.props = savedTypes;
+
+            if ((i + 1) % kBatchSize == 0 || i == N - 1)
+                commitBatch(i + 1);
         }
     } else {
         // Binary (big-endian swapping not implemented — 3DGS files are always LE)
@@ -313,15 +344,21 @@ static std::shared_ptr<GaussianModel> loadImpl(const std::filesystem::path& path
                 throw std::runtime_error("PLY: unexpected end of binary data at vertex " +
                                          std::to_string(i));
             fillRow(elemBuf.data(), i);
+
+            if ((i + 1) % kBatchSize == 0 || i == N - 1)
+                commitBatch(i + 1);
         }
     }
+
+    // If we used incremental batches, the last commitBatch already produced the
+    // fully-loaded model — return it directly to avoid a redundant tensor copy.
+    if (partialModel)
+        return partialModel;
 
     if (job)
         job->setStatusText("Building tensors…");
 
     auto model = std::make_shared<GaussianModel>();
-    auto opts  = torch::TensorOptions().dtype(torch::kFloat32);
-
     model->positions = torch::from_blob(positions.data(), {N, 3}, opts).clone();
     model->scales    = torch::from_blob(scales.data(), {N, 3}, opts).clone();
     model->rotations = torch::from_blob(rotations.data(), {N, 4}, opts).clone();
@@ -332,8 +369,9 @@ static std::shared_ptr<GaussianModel> loadImpl(const std::filesystem::path& path
 }
 
 std::shared_ptr<GaussianModel> PlyParser::loadAsync(const std::filesystem::path& path,
-                                                     AsyncJob&                    job) {
-    return loadImpl(path, &job);
+                                                     AsyncJob&          job,
+                                                     SplatBatchCallback onBatch) {
+    return loadImpl(path, &job, std::move(onBatch));
 }
 
 // ---------------------------------------------------------------------------
