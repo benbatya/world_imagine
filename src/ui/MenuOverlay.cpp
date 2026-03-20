@@ -93,6 +93,15 @@ void MenuOverlay::draw(AppState& state) {
             ImGui::EndDisabled();
 
         ImGui::Separator();
+        ImGui::TextDisabled("Camera");
+        CameraMode cm = state.cameraMode.load(std::memory_order_relaxed);
+        if (ImGui::RadioButton("Orbit", cm == CameraMode::Orbit))
+            state.cameraMode.store(CameraMode::Orbit, std::memory_order_relaxed);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Fly", cm == CameraMode::Fly))
+            state.cameraMode.store(CameraMode::Fly, std::memory_order_relaxed);
+
+        ImGui::Separator();
 
         if (hasModel) {
             size_t n = state.gaussianModel->numSplats();

@@ -38,10 +38,11 @@ public:
   // Positions the camera at 2.5× the radius away, facing the center.
   void fitToBounds(glm::vec3 center, float radius);
 
+  // World-space orientation quaternion (for initialising FlyCamera).
+  glm::quat orientation() const { return orientation_; }
+
 private:
   // Q = Ry(azimuth) * Rx(-elevation) at construction (azimuth=0, elevation=0.3 rad).
   // Updated incrementally by orbit(); world-space orientation of the camera.
   glm::quat orientation_{glm::angleAxis(-0.3f, glm::vec3{1.f, 0.f, 0.f})};
-
-  glm::quat orientation() const { return orientation_; }
 };

@@ -7,11 +7,16 @@
 // Forward-declared to avoid pulling in torch headers everywhere
 class GaussianModel;
 
+enum class CameraMode : int { Orbit, Fly };
+
 struct AppState {
     // Loaded 3DGS model — null until imported or trained.
     // Write only from the main thread (or under gaussianMutex from bg thread).
     std::shared_ptr<GaussianModel> gaussianModel;
     std::mutex gaussianMutex;
+
+    // Active camera mode — written and read on the main thread only.
+    std::atomic<CameraMode> cameraMode{CameraMode::Orbit};
 
     // Number of splats committed to gaussianModel so far.
     // Written by the background load thread (atomic); read by Viewport3D each

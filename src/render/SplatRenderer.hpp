@@ -22,12 +22,12 @@ public:
             const std::string& shaderDir);
   void destroy(VulkanContext& ctx);
 
-  // Upload new splat data (depth-sorted by camera position). Call on main thread.
-  void uploadSplats(VulkanContext& ctx, const GaussianModel& model, const OrbitCamera& cam);
+  // Upload new splat data (depth-sorted by camPos). Call on main thread.
+  void uploadSplats(VulkanContext& ctx, const GaussianModel& model, glm::vec3 camPos);
 
   // Record the offscreen render pass commands into cmd.
   // The offscreen color image starts and ends in SHADER_READ_ONLY_OPTIMAL.
-  void render(VulkanContext& ctx, VkCommandBuffer cmd, const OrbitCamera& cam,
+  void render(VulkanContext& ctx, VkCommandBuffer cmd, const CameraUBO& ubo,
               uint32_t width, uint32_t height);
 
   void resize(VulkanContext& ctx, uint32_t width, uint32_t height);

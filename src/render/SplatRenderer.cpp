@@ -363,7 +363,7 @@ void SplatRenderer::resize(VulkanContext& ctx, uint32_t width, uint32_t height) 
 // ---------------------------------------------------------------------------
 void SplatRenderer::uploadSplats(VulkanContext& ctx,
                                  const GaussianModel& model,
-                                 const OrbitCamera& cam) {
+                                 glm::vec3 camPos) {
   std::lock_guard lock{model.mutex};
 
   const size_t N = model.numSplats();
@@ -373,7 +373,6 @@ void SplatRenderer::uploadSplats(VulkanContext& ctx,
   }
 
   // Depth sort: back-to-front (descending distance = far-first for over blending)
-  glm::vec3 camPos = cam.position();
   auto camPosTensor = torch::tensor({camPos.x, camPos.y, camPos.z});
   auto diffs  = model.positions - camPosTensor; // [N,3]
   auto depths = diffs.norm(2, 1);               // [N]
@@ -457,12 +456,10 @@ void SplatRenderer::uploadSplats(VulkanContext& ctx,
 // ---------------------------------------------------------------------------
 void SplatRenderer::render(VulkanContext& ctx,
                            VkCommandBuffer cmd,
-                           const OrbitCamera& cam,
+                           const CameraUBO& ubo,
                            uint32_t width,
                            uint32_t height) {
-  // Update camera UBO every frame
-  float aspect = (height > 0) ? static_cast<float>(width) / static_cast<float>(height) : 1.f;
-  CameraUBO ubo = cam.makeUBO(aspect, static_cast<float>(width), static_cast<float>(height));
+  // Upload camera UBO every frame
   std::memcpy(m_cameraUBOMapped, &ubo, sizeof(ubo));
   vmaFlushAllocation(ctx.allocator, m_cameraUBOBuf.alloc, 0, sizeof(ubo));
 
