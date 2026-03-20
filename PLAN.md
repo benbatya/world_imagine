@@ -38,7 +38,8 @@ world_imagine/
 │   ├── render/
 │   │   ├── VulkanContext.hpp/.cpp  # instance, device, queues, swapchain
 │   │   ├── SplatRenderer.hpp/.cpp  # render pass, pipeline, descriptors
-│   │   ├── Camera.hpp/.cpp
+│   │   ├── OrbitCamera.hpp/.cpp    # orbit camera + CameraUBO definition
+│   │   ├── FlyCamera.hpp/.cpp      # first-person fly camera (quaternion-based)
 │   │   ├── VulkanPipeline.hpp/.cpp # SPIR-V shader loading + pipeline creation
 │   │   └── GpuBuffer.hpp/.cpp      # VkBuffer / VmaAllocation RAII wrappers
 │   ├── model/
@@ -73,10 +74,12 @@ Import Video → FrameExtractor (FFmpeg) → ColmapRunner (SfM) → SplatTrainer
 
 | Class | Responsibility |
 |---|---|
-| `AppState` | Shared state: `shared_ptr<GaussianModel>`, `shared_ptr<AsyncJob>`, status |
+| `AppState` | Shared state: `shared_ptr<GaussianModel>`, `shared_ptr<AsyncJob>`, status, `cameraMode` |
 | `GaussianModel` | `torch::Tensor` fields: positions[N,3], scales[N,3], rotations[N,4], opacities[N,1], sh_coeffs[N,K,3] |
 | `MenuOverlay` | Monitors `ImGui::GetMousePos()`, shows menu when in top-left 150×150px zone |
-| `Viewport3D` | Manages Vulkan offscreen image, exposes it via `ImGui::Image()`, orbit camera on mouse drag |
+| `Viewport3D` | Manages Vulkan offscreen image, exposes it via `ImGui::Image()`, owns OrbitCamera + FlyCamera |
+| `OrbitCamera` | Orbit-around-target camera; quaternion orientation to avoid gimbal lock |
+| `FlyCamera` | First-person fly camera; quaternion orientation to support roll |
 | `AsyncJob` | `std::atomic<float> progress`, `std::atomic<bool> cancelRequested`, `std::atomic<bool> done` |
 | `VideoImporter` | Launches `std::jthread` running the 3-stage pipeline, returns `AsyncJob` |
 
@@ -410,6 +413,88 @@ auto sorted_positions = positions.index_select(0, sorted_idx);
 ```
 
 Fast for ≤500k splats. For larger scenes, run sort on a background thread and double-buffer the vertex `VkBuffer` with a fence-guarded swap.
+
+### Camera System
+
+`Viewport3D` owns both cameras. `AppState::cameraMode` (an `atomic<CameraMode>`) selects the active one. The menu's Orbit/Fly radio buttons write this field; `Viewport3D::draw()` reads it each frame.
+
+#### Shared GPU interface
+
+Both cameras produce a `CameraUBO` (defined in `OrbitCamera.hpp`, reused by `FlyCamera`):
+
+```cpp
+struct CameraUBO {
+    glm::mat4 view;
+    glm::mat4 proj;       // Vulkan-convention: Y-flipped, depth in [0, 1]
+    glm::vec4 camPos;     // world-space camera position (w unused)
+    glm::vec4 viewport;   // xy = width, height in pixels (zw unused)
+};
+```
+
+`Viewport3D::draw()` calls `activeCamera.makeUBO(aspect, w, h)` and stores the result in `m_currentUBO`. `renderOffscreen()` passes it directly to `SplatRenderer::render()`, which memcpys it into the persistently-mapped UBO buffer each frame. `SplatRenderer::uploadSplats()` takes `glm::vec3 camPos` for depth-sorting — extracted from the active camera's `position()`.
+
+#### OrbitCamera (`src/render/OrbitCamera.hpp/.cpp`)
+
+Orbits around a `target` point at a given `distance`. Orientation is stored as a `glm::quat` to avoid gimbal lock.
+
+```
+orientation_ = Ry(azimuth) * Rx(-elevation)   // initialized at azimuth=0, elevation=−0.3 rad
+```
+
+| Method | What it does |
+|--------|-------------|
+| `orbit(dx, dy)` | Pre-multiply azimuth (world Y), post-multiply elevation (local X); 0.005 rad/px |
+| `pan(dx, dy)` | Translate `target` along camera-local right/up; scale = 0.001 × distance/px |
+| `dolly(delta)` | Multiplicative zoom: `distance *= (1 − delta × 0.001)`; floor at 0.01 |
+| `fitToBounds(center, radius)` | Sets `target = center`, `distance = 2.5 × radius`, adjusts `zNear/zFar` |
+| `resetOrientation(az, el)` | Rebuilds quaternion from explicit angles (used at init) |
+
+Controls wired in `Viewport3D` (Orbit mode, viewport hovered):
+
+| Input | Action |
+|-------|--------|
+| RMB drag | Orbit |
+| MMB drag | Pan |
+| Scroll | Dolly |
+
+#### FlyCamera (`src/render/FlyCamera.hpp/.cpp`)
+
+First-person camera with full 6-DOF including roll. Orientation stored as a `glm::quat`; local axes derived from it each frame:
+
+```cpp
+forward() = normalize(orientation_ * vec3(0, 0, -1))
+right()   = normalize(orientation_ * vec3(1, 0, 0))
+up()      = normalize(orientation_ * vec3(0, 1, 0))
+```
+
+View matrix: `mat4_cast(inverse(orientation_)) * translate(-position_)`.
+
+| Method | What it does |
+|--------|-------------|
+| `look(dx, dy)` | Yaw around **world Y**, pitch around **camera-local right**; 0.003 rad/px |
+| `roll(dr)` | Rotate around camera-local forward; 0.02 rad/step |
+| `move(fwd, rgt, upv, dt)` | Translate along local forward/right + world Y; scaled by `moveSpeed_ × dt` |
+| `pan(dx, dy)` | Translate along local right/up; scaled by `moveSpeed_ × 0.005`/px |
+| `dolly(ticks)` | Move along local forward; `ticks × moveSpeed_ × 0.5` units |
+| `adjustSpeed(factor)` | Multiply `moveSpeed_` by factor (clamped ≥ 0.01) |
+| `setFromOrbit(orbit)` | Copy `position()` and `orientation()` from an `OrbitCamera` |
+
+Controls wired in `Viewport3D` (Fly mode, viewport hovered):
+
+| Input | Action |
+|-------|--------|
+| RMB drag | Look (yaw + pitch) |
+| Arrow keys | Look (200 px/s equivalent) |
+| WASD | Move forward/back/strafe |
+| MMB drag | Pan (lateral + vertical) |
+| Q / E | Move up / down |
+| R / F | Roll left / right |
+| Scroll | Dolly along forward |
+| `=` / `-` | Speed × 1.2 / ÷ 1.2 |
+
+**Mode switching**: when `cameraMode` changes from Orbit → Fly, `Viewport3D` calls `m_flyCamera.setFromOrbit(m_camera)` so the view does not snap. Switching back to Orbit leaves the `OrbitCamera` state untouched.
+
+---
 
 ### Incremental Splat Display During Load
 
