@@ -34,7 +34,7 @@ static fs::path findOpensplat() {
     if (fs::exists(next2exe))
         return next2exe;
     fs::path buildTree =
-        exeDirectory().parent_path().parent_path() / "third_party/opensplat/build/opensplat";
+        exeDirectory().parent_path() / "third_party/opensplat/build/opensplat";
     if (fs::exists(buildTree))
         return buildTree;
     return "opensplat";
@@ -332,6 +332,12 @@ void VideoImporter::launchPipeline(AppState& state) {
                     job->setStatusText("Skipped COLMAP");
                     modelPath = colmapDir / "sparse" / "0";
                 }
+
+                // Ensure colmap/images/ points to the frames dir so OpenSplat can find
+                // the images at the conventional location regardless of where we stored them.
+                fs::path imagesLink = colmapDir / "images";
+                if (!fs::exists(imagesLink) && !fs::is_symlink(imagesLink))
+                    fs::create_directory_symlink(framesDir, imagesLink);
 
                 // --- Stage 3: train splats (65 – 100%) ---
                 if (doTrainer) {
