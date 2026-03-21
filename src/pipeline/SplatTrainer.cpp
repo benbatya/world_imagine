@@ -27,6 +27,14 @@ static int runOpensplat(const std::vector<std::string>& args,
     if (pipe(pipefd) < 0)
         throw std::runtime_error(std::format("pipe failed: {}", strerror(errno)));
 
+    // Print the command before invoking
+    std::string cmdLine;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (i > 0) cmdLine += ' ';
+        cmdLine += args[i];
+    }
+    fprintf(stderr, "[SplatTrainer] Running: %s\n", cmdLine.c_str());
+
     std::vector<char*> argv;
     argv.reserve(args.size() + 1);
     for (const auto& a : args)
@@ -64,7 +72,9 @@ static int runOpensplat(const std::vector<std::string>& args,
             buf.append(tmp, static_cast<size_t>(n));
             size_t pos;
             while ((pos = buf.find('\n')) != std::string::npos) {
-                onLine(buf.substr(0, pos));
+                auto line = buf.substr(0, pos);
+                fprintf(stderr, "[opensplat] %s\n", line.c_str());
+                onLine(line);
                 buf.erase(0, pos + 1);
             }
         }

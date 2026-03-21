@@ -56,7 +56,7 @@ void MenuOverlay::draw(AppState& state) {
         if (result == NFD_OKAY) {
             std::string path{outPath};
             NFD_FreePath(outPath);
-            VideoImporter::instance().importAsync(path, state);
+            VideoImporter::instance().beginImport(path, state);
         }
     }
 

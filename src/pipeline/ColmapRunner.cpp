@@ -3,6 +3,7 @@
 
 #include <cerrno>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <format>
@@ -11,7 +12,6 @@
 #include <thread>
 #include <vector>
 
-#include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -21,8 +21,17 @@ using namespace std::chrono_literals;
 
 // Forks and executes a command, polling every 100 ms for cancellation.
 // Returns the child's exit code, or -1 if cancelled.
-// Stderr/stdout are discarded (redirect to /dev/null).
+// Child inherits the parent's stdout/stderr.
 static int runSubprocess(const std::vector<std::string>& args, AsyncJob& job) {
+    // Log the command being run
+    std::string cmdLine;
+    for (const auto& a : args) {
+        if (!cmdLine.empty()) cmdLine += ' ';
+        cmdLine += a;
+    }
+    std::printf("[runSubprocess] %s\n", cmdLine.c_str());
+    std::fflush(stdout);
+
     std::vector<char*> argv;
     argv.reserve(args.size() + 1);
     for (const auto& a : args)
@@ -34,12 +43,8 @@ static int runSubprocess(const std::vector<std::string>& args, AsyncJob& job) {
         throw std::runtime_error(std::format("fork failed: {}", strerror(errno)));
 
     if (pid == 0) {
-        int devnull = open("/dev/null", O_WRONLY);
-        if (devnull >= 0) {
-            dup2(devnull, STDOUT_FILENO);
-            dup2(devnull, STDERR_FILENO);
-            close(devnull);
-        }
+        // Child inherits parent's stdout/stderr — no redirect needed.
+        setenv("QT_QPA_PLATFORM", "xcb", 1);
         execvp(argv[0], argv.data());
         _exit(127);
     }
@@ -96,7 +101,7 @@ fs::path ColmapRunner::run(const ColmapConfig& cfg,
     job.setStatusText("COLMAP: matching features…");
 
     rc = runSubprocess({cfg.colmapBin,
-                        "exhaustive_matcher",
+                        "sequential_matcher",
                         "--database_path", db},
                        job);
     if (rc == -1) return {};

@@ -2,3 +2,4 @@ test_data/
 build/
 imgui.ini
 third_party/opensplat/
+run_*/
