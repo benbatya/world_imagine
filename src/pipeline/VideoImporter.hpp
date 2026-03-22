@@ -15,9 +15,9 @@ public:
     VideoImporter(const VideoImporter&)            = delete;
     VideoImporter& operator=(const VideoImporter&) = delete;
 
-    // Begin the import workflow: shows directory selection, then confirmation dialogs
-    // for each pipeline stage. Call after the user has picked a video file.
-    void beginImport(const std::filesystem::path& videoPath, AppState& state);
+    // Begin the import workflow: shows directory selection, then video selection (or
+    // reads the stored path from config.yaml), then confirmation dialogs per stage.
+    void beginImport(AppState& state);
 
     // Draw confirmation dialog UI (call every frame from the main loop).
     // Returns true if a dialog is currently visible.
@@ -51,6 +51,7 @@ private:
     enum class State {
         Idle,
         PickDirectory, // ImGui modal: edit run directory path
+        PickVideo,     // ImGui modal: browse for video (shown when no config.yaml)
         AskFrames,     // frames/ exists — ask user
         AskColmap,     // colmap/ exists — ask user
         AskTrainer,    // output.ply exists — ask user
@@ -62,7 +63,8 @@ private:
     // Paths
     std::filesystem::path m_videoPath;
     std::filesystem::path m_runRoot;
-    char                  m_dirBuf[1024]{};  // ImGui InputText buffer
+    char                  m_dirBuf[1024]{};    // ImGui InputText buffer for run dir
+    char                  m_videoBuf[1024]{};  // ImGui InputText buffer for video path
 
     // Stage decisions (true = run that stage)
     bool m_runExtract{true};

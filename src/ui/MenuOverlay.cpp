@@ -50,14 +50,7 @@ void MenuOverlay::draw(AppState& state) {
         ImGui::BeginDisabled();
 
     if (ImGui::MenuItem("Import Video")) {
-        nfdchar_t*      outPath = nullptr;
-        nfdfilteritem_t filters[1] = {{"Video files", "mp4,avi,mov,mkv"}};
-        nfdresult_t     result     = NFD_OpenDialog(&outPath, filters, 1, nullptr);
-        if (result == NFD_OKAY) {
-            std::string path{outPath};
-            NFD_FreePath(outPath);
-            VideoImporter::instance().beginImport(path, state);
-        }
+        VideoImporter::instance().beginImport(state);
     }
 
     if (ImGui::MenuItem("Import Splats")) {

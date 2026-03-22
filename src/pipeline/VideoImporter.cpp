@@ -15,6 +15,7 @@
 #include <ctime>
 #include <filesystem>
 #include <format>
+#include <fstream>
 #include <stdexcept>
 
 #include <unistd.h>
@@ -51,16 +52,49 @@ static std::string defaultRunDirName() {
     return buf;
 }
 
+// ---------------------------------------------------------------------------
+// config.yaml helpers — minimal hand-rolled read/write (no external YAML lib)
+// ---------------------------------------------------------------------------
+static fs::path configPath(const fs::path& runRoot) { return runRoot / "config.yaml"; }
+
+static void writeConfig(const fs::path& runRoot, const fs::path& videoPath) {
+    std::ofstream f(configPath(runRoot));
+    if (f)
+        f << "video_path: " << videoPath.string() << "\n";
+}
+
+// Returns empty path if not found or unreadable.
+static fs::path readConfigVideoPath(const fs::path& runRoot) {
+    std::ifstream f(configPath(runRoot));
+    if (!f)
+        return {};
+    std::string line;
+    while (std::getline(f, line)) {
+        const std::string key = "video_path:";
+        if (line.rfind(key, 0) == 0) {
+            std::string val = line.substr(key.size());
+            // trim leading whitespace
+            auto pos = val.find_first_not_of(" \t");
+            if (pos != std::string::npos)
+                val = val.substr(pos);
+            return fs::path(val);
+        }
+    }
+    return {};
+}
+
+// ---------------------------------------------------------------------------
+
 VideoImporter& VideoImporter::instance() {
     static VideoImporter s;
     return s;
 }
 
-void VideoImporter::beginImport(const fs::path& videoPath, AppState& /*state*/) {
+void VideoImporter::beginImport(AppState& /*state*/) {
     if (m_state != State::Idle)
         return; // already in a workflow
 
-    m_videoPath  = videoPath;
+    m_videoPath  = fs::path{};
     m_runExtract = true;
     m_runColmap  = true;
     m_runTrainer = true;
@@ -72,8 +106,6 @@ void VideoImporter::beginImport(const fs::path& videoPath, AppState& /*state*/) 
     m_dirBuf[sizeof(m_dirBuf) - 1] = '\0';
 
     m_state = State::PickDirectory;
-    std::cout << "m_state=" << (int)m_state << std::endl;
-
 }
 
 bool VideoImporter::drawUI(AppState& state) {
@@ -114,8 +146,69 @@ bool VideoImporter::drawUI(AppState& state) {
                 m_runRoot = fs::path(m_dirBuf);
                 fs::create_directories(m_runRoot);
                 ImGui::CloseCurrentPopup();
+
+                // Check config.yaml for a previously stored video path
+                fs::path storedVideo = readConfigVideoPath(m_runRoot);
+                if (!storedVideo.empty() && fs::exists(storedVideo)) {
+                    m_videoPath = storedVideo;
+                    advanceState(state);
+                } else {
+                    // No valid config — ask the user to pick a video
+                    m_videoBuf[0] = '\0';
+                    m_state = State::PickVideo;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", {120, 0})) {
+                ImGui::CloseCurrentPopup();
+                m_state = State::Idle;
+            }
+            ImGui::EndPopup();
+        }
+        return true;
+    }
+
+    case State::PickVideo: {
+        ImGui::OpenPopup("Select Video File");
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, {0.5f, 0.5f});
+        ImGui::SetNextWindowSize({520, 0}, ImGuiCond_Appearing);
+
+        if (ImGui::BeginPopupModal("Select Video File", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("Choose the video file to import into '%s'.",
+                               m_runRoot.string().c_str());
+            ImGui::Spacing();
+
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 90);
+            ImGui::InputText("##videopath", m_videoBuf, sizeof(m_videoBuf));
+            ImGui::SameLine();
+            if (ImGui::Button("Browse…")) {
+                nfdchar_t*      outPath = nullptr;
+                nfdfilteritem_t filters[1] = {{"Video files", "mp4,avi,mov,mkv"}};
+                nfdresult_t     nfdRes  = NFD_OpenDialog(&outPath, filters, 1, nullptr);
+                if (nfdRes == NFD_OKAY) {
+                    std::strncpy(m_videoBuf, outPath, sizeof(m_videoBuf) - 1);
+                    m_videoBuf[sizeof(m_videoBuf) - 1] = '\0';
+                    NFD_FreePath(outPath);
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            const bool hasPath = m_videoBuf[0] != '\0';
+            if (!hasPath)
+                ImGui::BeginDisabled();
+            if (ImGui::Button("OK", {120, 0})) {
+                m_videoPath = fs::path(m_videoBuf);
+                writeConfig(m_runRoot, m_videoPath);
+                ImGui::CloseCurrentPopup();
                 advanceState(state);
             }
+            if (!hasPath)
+                ImGui::EndDisabled();
             ImGui::SameLine();
             if (ImGui::Button("Cancel", {120, 0})) {
                 ImGui::CloseCurrentPopup();
