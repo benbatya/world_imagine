@@ -2,9 +2,7 @@
 
 A Gaussian Splatting viewer built with Vulkan, GLFW, ImGui, and LibTorch.
 
-<video src="https://github.com/benbatya/world_imagine/releases/download/media-assets/Screencast_20260407_132650.webm" controls width="600"></video>
-
-*Video-to-splat pipeline in action*
+<video src="https://github.com/benbatya/world_imagine/releases/download/media-assets/Screencast_20260407_132650.webm" controls width="600">*Video-to-splat pipeline in action*</video>
 
 ## Dependencies
 
