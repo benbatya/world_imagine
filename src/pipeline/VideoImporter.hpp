@@ -50,12 +50,15 @@ private:
 
     enum class State {
         Idle,
-        PickDirectory, // ImGui modal: edit run directory path
-        PickVideo,     // ImGui modal: browse for video (shown when no config.yaml)
-        AskFrames,     // frames/ exists — ask user
-        AskColmap,     // colmap/ exists — ask user
-        AskTrainer,    // output.ply exists — ask user
-        Running,       // background thread active
+        PickDirectory,  // ImGui modal: edit run directory path
+        PickVideo,      // ImGui modal: browse for video (shown when no config.yaml)
+        PrereqError,    // ImGui modal: prerequisite check failed
+        AskFrames,      // frames/ exists -- ask user
+        AskInstantSplat, // instantsplat/ output exists -- ask user
+        Running,        // background thread active
+        // --- COLMAP+OpenSplat states (commented out — kept as fallback) ---
+        // AskColmap,
+        // AskTrainer,
     };
 
     State m_state{State::Idle};
@@ -68,8 +71,15 @@ private:
 
     // Stage decisions (true = run that stage)
     bool m_runExtract{true};
-    bool m_runColmap{true};
-    bool m_runTrainer{true};
+    bool m_runInstantSplat{true};
+
+    // --- COLMAP+OpenSplat stage decisions (commented out — kept as fallback) ---
+    // bool m_runColmap{true};
+    // bool m_runTrainer{true};
+
+    // Error message for prerequisite failures
+    std::string m_prereqError;
+    std::string m_prereqLogPath;
 
     std::shared_ptr<AsyncJob>   m_job;
     std::optional<std::jthread> m_thread;
