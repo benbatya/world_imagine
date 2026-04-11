@@ -1,0 +1,65 @@
+[
+  {
+    "category": "INstallation",
+    "step": 1,
+    "title": "Docker environment setup and verification",
+    "description": "Set up the Docker environment for running InstantSplat. Verify that Docker is installed on the host, nvidia-container-toolkit is configured, and GPU access works inside a container. Pull the base image (dockerzhiwen/instantsplat_public:2.0) and verify it runs correctly by executing nvidia-smi inside the container. DO NOT install Docker or nvidia-container-toolkit — prompt the user with clear instructions if either is missing.",
+    "passes": true,
+    "acceptance": [
+      "Docker is installed and the daemon is running",
+      "nvidia-container-toolkit is configured (docker run --gpus all nvidia-smi succeeds)",
+      "The base image dockerzhiwen/instantsplat_public:2.0 is pulled successfully",
+      "nvidia-smi inside the container reports a GPU with CUDA available"
+    ]
+  },
+  {
+    "category": "Installation",
+    "step": 2,
+    "title": "Install InstantSplat into the Docker container",
+    "description": "Install InstantSplat (https://github.com/NVlabs/InstantSplat) into the Docker container. Clone the repo with submodules (MASt3R, DUSt3R, CroCo), compile the custom CUDA extensions (simple-knn, diff-gaussian-rasterization, fused-ssim), and download the MASt3R pretrained checkpoint. Commit the result as a new Docker image (e.g. world_imagine/instantsplat:latest) so the setup only happens once. Verify by running init_geo.py --help or equivalent to confirm all imports resolve.",
+    "passes": true,
+    "acceptance": [
+      "InstantSplat repo is cloned with all submodules inside the container",
+      "Custom CUDA extensions (simple-knn, diff-gaussian-rasterization, fused-ssim) compile without errors",
+      "MASt3R pretrained checkpoint is downloaded and accessible",
+      "A committed Docker image (world_imagine/instantsplat:latest) exists with everything installed",
+      "Python imports for InstantSplat, MASt3R, and all dependencies succeed inside the container"
+    ]
+  },
+  {
+    "category": "Coding",
+    "step": 3,
+    "title": "Write InstantSplat pipeline code paths and comment out COLMAP+OpenSplat entry point",
+    "description": "Write the new C++ code to invoke InstantSplat via Docker as the default video-to-splat pipeline. The pipeline is: FrameExtractor (FFmpeg on host) extracts frames from the input video → frames directory is mounted into the Docker container → InstantSplat runs init_geo.py, train.py, render.py inside the container → output .ply is mounted back to the host and loaded via PlyParser. Keep the existing COLMAP + OpenSplat code paths intact as an alternative fallback but comment out their entry point so InstantSplat is the default. Error handling: if InstantSplat fails or prerequisites are missing, display the failure in an ImGui dialog box, write the error details to a timestamped log file (e.g. logs/import_error_2026-04-10_143022.log), and stop the import process cleanly. The import progress should be reported via AsyncJob/ProgressModal. Note: InstantSplat is licensed for non-commercial/research use only (INRIA 3DGS license).",
+    "passes": false,
+    "acceptance": [
+      "The system builds without errors or warnings",
+      "Prerequisite check detects missing Docker, nvidia-container-toolkit, or InstantSplat image and reports a clear error in an ImGui dialog",
+      "On failure, error details are written to a timestamped log file under logs/",
+      "On failure, the import process stops cleanly without crashing",
+      "FrameExtractor successfully extracts frames from video on the host",
+      "Docker container is invoked with correct GPU flags, volume mounts for frames in and .ply out",
+      "InstantSplat init_geo.py, train.py, and render.py run to completion inside the container",
+      "The pipeline produces a valid .ply file loadable by PlyParser",
+      "Import progress is displayed via ProgressModal during the pipeline",
+      "The existing COLMAP + OpenSplat code paths remain in the codebase with their entry point commented out",
+      "The COLMAP + OpenSplat pipeline can be re-enabled by uncommenting the entry point"
+    ]
+  },
+  {
+    "category": "Testing",
+    "step": 4,
+    "title": "End-to-end testing and bug fixing",
+    "description": "Test the full pipeline end-to-end using test_data/VID_20260320_175453.mp4. Use xdotool to click the Import Video button, specify the test video path, and wait for the import progress to complete. Once imported, navigate with the Fly camera to the middle of the generated splat model. Use scrot to take a screenshot and compare it against the first extracted JPG frame from the input video using the pixelmatch algorithm with a 90% alignment threshold. Performance requirement: the full import of test_data/VID_20260320_175453.mp4 must complete within 10 minutes. Fix any bugs or issues discovered during testing.",
+    "passes": false,
+    "acceptance": [
+      "xdotool successfully clicks Import Video and enters test_data/VID_20260320_175453.mp4",
+      "The import progress modal appears and completes without errors",
+      "The full import completes within 10 minutes",
+      "The gaussian splats render in the viewport after import",
+      "Fly camera navigation to the center of the splat model works correctly",
+      "scrot screenshot of the rendered splat at center position achieves >= 90% pixelmatch alignment against the first extracted JPG frame of the input video",
+      "No crashes, hangs, or unhandled errors occur during the entire workflow"
+    ]
+  }
+]

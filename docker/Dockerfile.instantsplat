@@ -1,0 +1,67 @@
+FROM dockerzhiwen/instantsplat_public:2.0
+
+# Install git and wget (not present in the base image)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        git-lfs \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# GPU architecture for CUDA extension compilation.
+# RTX 3080/3090/A-series = sm_86; add others if needed.
+ENV TORCH_CUDA_ARCH_LIST="8.6"
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH="/usr/local/cuda/bin:${PATH}"
+
+WORKDIR /opt/instantsplat
+
+# Clone InstantSplat with all submodules (MASt3R → DUSt3R → CroCo)
+RUN git clone --recursive --depth 1 \
+        https://github.com/NVlabs/InstantSplat.git .
+
+# Install any missing Python dependencies
+RUN pip install --no-cache-dir \
+        plyfile \
+        tqdm \
+        scipy \
+        trimesh \
+        ninja
+
+# Compile CUDA submodules (requires nvcc; no running GPU needed for compilation)
+RUN cd submodules/simple-knn && \
+    pip install --no-cache-dir -e . --no-build-isolation
+
+RUN cd submodules/diff-gaussian-rasterization && \
+    pip install --no-cache-dir -e . --no-build-isolation
+
+RUN cd submodules/fused-ssim && \
+    pip install --no-cache-dir -e . --no-build-isolation
+
+# Download MASt3R pretrained checkpoint from Naver Labs.
+# init_geo.py default: ./mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth
+RUN mkdir -p /opt/instantsplat/mast3r/checkpoints && \
+    wget -q --show-progress \
+        "https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth" \
+        -O /opt/instantsplat/mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth
+
+# Verify all imports resolve
+RUN python3 - <<'EOF'
+import sys
+# Basic torch
+import torch
+print(f"torch {torch.__version__}, CUDA available in headers: {torch.version.cuda}")
+
+# InstantSplat / gaussian-splatting deps
+import plyfile
+import tqdm
+import scipy
+import trimesh
+
+# MASt3R / DUSt3R — check the submodule is importable
+sys.path.insert(0, "/opt/instantsplat/mast3r")
+sys.path.insert(0, "/opt/instantsplat/mast3r/dust3r")
+
+print("All imports OK")
+EOF
+
+WORKDIR /opt/instantsplat
