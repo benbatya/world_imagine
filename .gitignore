@@ -3,3 +3,4 @@ build/
 imgui.ini
 third_party/opensplat/
 run_*/
+package-lock.json
