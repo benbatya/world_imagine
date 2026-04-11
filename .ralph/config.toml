@@ -1,0 +1,7 @@
+# Ralph configuration
+adapter = "claude"
+model = "sonnet"
+plansDir = ".plans"
+maxIterations = 10
+verbose = false
+tui = true
