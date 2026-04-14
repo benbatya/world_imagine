@@ -3,8 +3,10 @@
 #include "render/FlyCamera.hpp"
 #include "render/SplatRenderer.hpp"
 #include "app/AppState.hpp"
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 class GaussianModel;
 struct VulkanContext;
@@ -26,6 +28,11 @@ public:
 
   // Reset both cameras to their default poses.
   void resetCameras();
+
+  // Read back the offscreen FBO as RGBA8 pixels (for automated screenshots).
+  std::vector<uint8_t> readbackImage(VulkanContext& ctx) { return m_renderer.readbackImage(ctx); }
+  uint32_t viewportWidth() const { return m_vpWidth; }
+  uint32_t viewportHeight() const { return m_vpHeight; }
 
 private:
   SplatRenderer m_renderer;

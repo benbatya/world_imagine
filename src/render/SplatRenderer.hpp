@@ -3,6 +3,7 @@
 #include "GpuBuffer.hpp"
 #include "VulkanPipeline.hpp"
 #include <cstdint>
+#include <vector>
 #include <vulkan/vulkan.h>
 
 struct VulkanContext;
@@ -36,6 +37,13 @@ public:
   VkDescriptorSet outputDescriptorSet() const { return m_imguiTexDescSet; }
 
   bool hasContent() const { return m_splatCount > 0; }
+
+  // Read back the offscreen color image to CPU memory as RGBA8 pixels.
+  // Must be called after render() and after GPU work has completed (device idle).
+  std::vector<uint8_t> readbackImage(VulkanContext& ctx);
+
+  uint32_t width() const { return m_width; }
+  uint32_t height() const { return m_height; }
 
 private:
   // Offscreen render target

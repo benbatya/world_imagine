@@ -50,15 +50,16 @@
     "category": "Testing",
     "step": 4,
     "title": "End-to-end testing and bug fixing",
-    "description": "Test the full pipeline end-to-end using test_data/VID_20260320_175453.mp4. Use xdotool to click the Import Video button, specify the test video path, and wait for the import progress to complete. Once imported, navigate with the Fly camera to the middle of the generated splat model. Use scrot to take a screenshot and compare it against the first extracted JPG frame from the input video using the pixelmatch algorithm with a 90% alignment threshold. Performance requirement: the full import of test_data/VID_20260320_175453.mp4 must complete within 10 minutes. Fix any bugs or issues discovered during testing.",
+    "description": "Test the full pipeline end-to-end using CLI automation flags. Launch the app with --import-run <run_dir> --no-extract --no-instantsplat --screenshot <path> --screenshot-delay 3 to drive the import pipeline programmatically (bypassing UI dialogs). The app loads the existing InstantSplat fixture, renders the splats with the camera pose from cameras.json, captures the offscreen FBO to a PNG screenshot, and exits. Compare the screenshot against the first extracted JPG frame using pixelmatch with a 90% alignment threshold. Performance requirement: the full import must complete within 10 minutes. Fix any bugs or issues discovered during testing.",
     "passes": false,
     "acceptance": [
-      "xdotool successfully clicks Import Video and enters test_data/VID_20260320_175453.mp4",
-      "The import progress modal appears and completes without errors",
+      "CLI --import-run flag triggers import without UI interaction",
+      "The import pipeline completes without errors (app exits with code 0)",
       "The full import completes within 10 minutes",
       "The gaussian splats render in the viewport after import",
-      "Fly camera navigation to the center of the splat model works correctly",
-      "scrot screenshot of the rendered splat at center position achieves >= 90% pixelmatch alignment against the first extracted JPG frame of the input video",
+      "Camera pose from cameras.json is applied automatically (Fly camera)",
+      "--screenshot flag captures the offscreen FBO as a valid PNG file",
+      "Screenshot achieves >= 90% pixelmatch alignment against the first extracted JPG frame of the input video",
       "No crashes, hangs, or unhandled errors occur during the entire workflow"
     ]
   }

@@ -19,6 +19,11 @@ public:
     // reads the stored path from config.yaml), then confirmation dialogs per stage.
     void beginImport(AppState& state);
 
+    // Programmatic import: set run dir + stage decisions and launch pipeline directly,
+    // bypassing all UI dialogs. For CLI/test automation.
+    void beginAutoImport(AppState& state, std::filesystem::path runDir,
+                         bool extract, bool instantSplat);
+
     // Draw confirmation dialog UI (call every frame from the main loop).
     // Returns true if a dialog is currently visible.
     bool drawUI(AppState& state);

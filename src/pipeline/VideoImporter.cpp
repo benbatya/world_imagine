@@ -13,12 +13,17 @@
 #include <imgui.h>
 #include <nfd.h>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include <chrono>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 
 #include <unistd.h>
@@ -67,10 +72,106 @@ static fs::path readConfigVideoPath(const fs::path& runRoot) {
 }
 
 // ---------------------------------------------------------------------------
+// Minimal JSON number parser helper (no external dep)
+// ---------------------------------------------------------------------------
+static double parseNumber(const std::string& s, size_t& pos) {
+    size_t start = pos;
+    if (pos < s.size() && (s[pos] == '-' || s[pos] == '+'))
+        ++pos;
+    while (pos < s.size() && (std::isdigit(s[pos]) || s[pos] == '.' || s[pos] == 'e' ||
+                               s[pos] == 'E' || s[pos] == '-' || s[pos] == '+'))
+        ++pos;
+    return std::stod(s.substr(start, pos - start));
+}
+
+// Try to parse cameras.json (camera 0 only) and return a CamPose.
+// Returns {false} if the file can't be parsed.
+static std::pair<bool, AppState::CamPose> parseCameraZero(const fs::path& camJsonPath) {
+    std::ifstream f(camJsonPath);
+    if (!f)
+        return {false, {}};
+
+    std::string src((std::istreambuf_iterator<char>(f)), {});
+
+    // Find first object (camera id 0) — locate "position" and "rotation" arrays.
+    auto findTag = [&](const std::string& tag, size_t from) -> size_t {
+        size_t p = src.find('"' + tag + '"', from);
+        if (p == std::string::npos)
+            return std::string::npos;
+        p = src.find('[', p);
+        return p;
+    };
+
+    size_t posIdx = findTag("position", 0);
+    size_t rotIdx = findTag("rotation", 0);
+    if (posIdx == std::string::npos || rotIdx == std::string::npos)
+        return {false, {}};
+
+    try {
+        // Parse position [x, y, z]
+        size_t p = posIdx + 1;
+        float px = static_cast<float>(parseNumber(src, p));
+        p = src.find(',', p) + 1;
+        float py = static_cast<float>(parseNumber(src, p));
+        p = src.find(',', p) + 1;
+        float pz = static_cast<float>(parseNumber(src, p));
+
+        // Parse rotation [[r00,r01,r02],[r10,r11,r12],[r20,r21,r22]]
+        // Each row is a nested array.
+        auto parseRow = [&](size_t& pos) -> std::array<float, 3> {
+            pos = src.find('[', pos) + 1;
+            float a = static_cast<float>(parseNumber(src, pos));
+            pos = src.find(',', pos) + 1;
+            float b = static_cast<float>(parseNumber(src, pos));
+            pos = src.find(',', pos) + 1;
+            float c = static_cast<float>(parseNumber(src, pos));
+            pos = src.find(']', pos) + 1;
+            return {a, b, c};
+        };
+
+        size_t rp = rotIdx + 1;
+        auto row0 = parseRow(rp);
+        auto row1 = parseRow(rp);
+        auto row2 = parseRow(rp);
+
+        // R_w2c = cameras.json rotation (row-major 3x3).
+        // FlyCamera orientation = quat_cast(R_cw) where R_cw = R_w2c^T.
+        // In GLM column-major: column i of R_cw = row i of R_w2c.
+        glm::mat3 R_cw{
+            glm::vec3{row0[0], row0[1], row0[2]},  // column 0 of R_cw
+            glm::vec3{row1[0], row1[1], row1[2]},  // column 1
+            glm::vec3{row2[0], row2[1], row2[2]},  // column 2
+        };
+
+        AppState::CamPose cp;
+        cp.position    = glm::vec3{px, py, pz};
+        cp.orientation = glm::normalize(glm::quat_cast(R_cw));
+        return {true, cp};
+    } catch (...) {
+        return {false, {}};
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 VideoImporter& VideoImporter::instance() {
     static VideoImporter s;
     return s;
+}
+
+void VideoImporter::beginAutoImport(AppState& state, fs::path runDir, bool extract,
+                                     bool instantSplat) {
+    if (m_state != State::Idle)
+        return;
+
+    m_runRoot         = std::move(runDir);
+    m_videoPath       = readConfigVideoPath(m_runRoot);
+    m_runExtract      = extract;
+    m_runInstantSplat = instantSplat;
+    m_prereqError.clear();
+    m_prereqLogPath.clear();
+
+    launchPipeline(state);
 }
 
 void VideoImporter::beginImport(AppState& /*state*/) {
@@ -420,6 +521,14 @@ void VideoImporter::launchPipeline(AppState& state) {
                 throw std::runtime_error("Failed to load PLY: " + plyPath.string());
 
             job->setProgress(1.f);
+
+            // Try to read cameras.json from instantsplat output for camera 0 pose.
+            fs::path camJson = instantSplatDir / "cameras.json";
+            if (auto [ok, cp] = parseCameraZero(camJson); ok) {
+                std::lock_guard lock{state.camPoseMutex};
+                state.pendingCamPose = cp;
+                state.hasPendingCamPose.store(true, std::memory_order_release);
+            }
 
             {
                 std::lock_guard lock{state.gaussianMutex};

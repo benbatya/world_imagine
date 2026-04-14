@@ -91,6 +91,19 @@ void Viewport3D::draw(VulkanContext& ctx, AppState& state) {
                     float     radius = glm::length(ext) * 0.5f;
                     m_camera.fitToBounds(center, radius);
                 }
+
+                // Apply pending camera pose from VideoImporter (cameras.json camera 0).
+                if (state.hasPendingCamPose.load(std::memory_order_acquire)) {
+                    AppState::CamPose cp;
+                    {
+                        std::lock_guard lock{state.camPoseMutex};
+                        cp = state.pendingCamPose;
+                    }
+                    state.hasPendingCamPose.store(false, std::memory_order_release);
+                    m_flyCamera.set(cp.position, cp.orientation);
+                    state.cameraMode.store(CameraMode::Fly, std::memory_order_relaxed);
+                    m_prevMode = CameraMode::Fly;
+                }
             }
 
             m_lastSplatCount = committedCount;

@@ -125,7 +125,8 @@ void SplatRenderer::createOffscreenImages(VulkanContext& ctx, uint32_t w, uint32
     };
 
     makeImage(k_colorFormat,
-              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
               VK_IMAGE_ASPECT_COLOR_BIT, m_colorImage, m_colorView, m_colorAlloc);
 
     makeImage(k_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -649,6 +650,49 @@ void SplatRenderer::resize(VulkanContext& ctx, uint32_t width, uint32_t height) 
                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     updateDescriptors(ctx);
+}
+
+// ---------------------------------------------------------------------------
+// readbackImage — GPU → CPU readback of offscreen color image
+// ---------------------------------------------------------------------------
+std::vector<uint8_t> SplatRenderer::readbackImage(VulkanContext& ctx) {
+    if (!m_colorImage || m_width == 0 || m_height == 0)
+        return {};
+
+    const VkDeviceSize byteSize = static_cast<VkDeviceSize>(m_width) * m_height * 4;
+
+    GpuBuffer staging;
+    void* mapped = staging.createMapped(ctx.allocator, byteSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+
+    auto cmd = beginOneTime(ctx);
+
+    // Transition color image: SHADER_READ_ONLY → TRANSFER_SRC
+    transitionColor(cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_SHADER_READ_BIT,
+                    VK_ACCESS_TRANSFER_READ_BIT);
+
+    VkBufferImageCopy region{};
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent                 = {m_width, m_height, 1};
+
+    vkCmdCopyImageToBuffer(cmd, m_colorImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, staging.buffer,
+                           1, &region);
+
+    // Transition back: TRANSFER_SRC → SHADER_READ_ONLY
+    transitionColor(cmd, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                    VK_ACCESS_SHADER_READ_BIT);
+
+    endOneTime(ctx, cmd);
+
+    std::vector<uint8_t> pixels(byteSize);
+    std::memcpy(pixels.data(), mapped, byteSize);
+    staging.destroy(ctx.allocator);
+
+    return pixels;
 }
 
 // ---------------------------------------------------------------------------

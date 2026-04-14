@@ -18,6 +18,9 @@
 #include <nfd.h>
 #include <vulkan/vulkan.h>
 
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+
 static std::string exeDir() {
   char buf[4096]{};
   ssize_t len = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
@@ -33,10 +36,32 @@ Application::Application(int argc, char* argv[]) {
   std::string shaderDir = exeDir() + "/shaders";
   m_viewport.init(ctx, 800, 600, shaderDir);
 
-  // Load a PLY file if one was passed as the first positional argument.
-  // The progress modal will handle display during run().
-  if (argc >= 2) {
-    SplatIO::instance().loadAsync(argv[1], m_state);
+  // Parse CLI arguments
+  std::string positionalArg;
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "--import-run" && i + 1 < argc) {
+      m_autoImportDir = argv[++i];
+      m_autoMode      = true;
+    } else if (arg == "--no-extract") {
+      m_skipExtract = true;
+    } else if (arg == "--no-instantsplat") {
+      m_skipInstantSplat = true;
+    } else if (arg == "--screenshot" && i + 1 < argc) {
+      m_screenshotPath = argv[++i];
+    } else if (arg == "--screenshot-delay" && i + 1 < argc) {
+      m_screenshotDelay = std::stof(argv[++i]);
+    } else if (arg.rfind("--", 0) != 0) {
+      positionalArg = arg;
+    }
+  }
+
+  if (m_autoMode) {
+    VideoImporter::instance().beginAutoImport(m_state, m_autoImportDir, !m_skipExtract,
+                                              !m_skipInstantSplat);
+  } else if (!positionalArg.empty()) {
+    // Load a PLY file if one was passed as a positional argument.
+    SplatIO::instance().loadAsync(positionalArg, m_state);
   }
 }
 
@@ -106,6 +131,45 @@ void Application::run() {
     m_progressOverlay.draw(m_state);
     m_controlsOverlay.draw(m_state, m_viewport);
     m_fpsOverlay.draw();
+
+    // --- Auto-mode: detect completion, screenshot, exit ---
+    if (m_autoMode && m_autoState != AutoState::Done) {
+      auto& vim = VideoImporter::instance();
+      if (m_autoState == AutoState::WaitingImport) {
+        // ProgressOverlay calls finalize() automatically when job is done.
+        // After finalize, VideoImporter goes back to idle (not loading, not done).
+        if (!vim.isLoading() && !vim.isDone()) {
+          if (m_state.committedSplatCount.load() > 0) {
+            m_importDoneTime = Clock::now();
+            m_autoState      = AutoState::WaitingDelay;
+            m_idleFrames     = 0;
+          } else if (++m_idleFrames > 60) {
+            std::fprintf(stderr, "AUTO_IMPORT_FAILED\n");
+            glfwSetWindowShouldClose(m_window.glfwHandle(), GLFW_TRUE);
+            m_autoState = AutoState::Done;
+          }
+        }
+      } else if (m_autoState == AutoState::WaitingDelay) {
+        auto elapsed = Duration(Clock::now() - m_importDoneTime).count();
+        if (elapsed >= static_cast<double>(m_screenshotDelay)) {
+          if (!m_screenshotPath.empty()) {
+            vkDeviceWaitIdle(ctx.device);
+            auto pixels = m_viewport.readbackImage(ctx);
+            if (!pixels.empty()) {
+              cv::Mat rgba(static_cast<int>(m_viewport.viewportHeight()),
+                           static_cast<int>(m_viewport.viewportWidth()), CV_8UC4, pixels.data());
+              cv::Mat bgr;
+              cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+              cv::imwrite(m_screenshotPath.string(), bgr);
+            }
+          }
+          std::printf("AUTO_IMPORT_DONE splats=%zu\n", m_state.committedSplatCount.load());
+          std::fflush(stdout);
+          glfwSetWindowShouldClose(m_window.glfwHandle(), GLFW_TRUE);
+          m_autoState = AutoState::Done;
+        }
+      }
+    }
 
     // --- ImGui render ---
     ImGui::Render();

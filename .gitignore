@@ -4,3 +4,4 @@ imgui.ini
 third_party/opensplat/
 run_*/
 package-lock.json
+node_modules/
