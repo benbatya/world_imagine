@@ -31,7 +31,7 @@
     "step": 3,
     "title": "Write InstantSplat pipeline code paths and comment out COLMAP+OpenSplat entry point",
     "description": "Write the new C++ code to invoke InstantSplat via Docker as the default video-to-splat pipeline. The pipeline is: FrameExtractor (FFmpeg on host) extracts frames from the input video → frames directory is mounted into the Docker container → InstantSplat runs init_geo.py, train.py, render.py inside the container → output .ply is mounted back to the host and loaded via PlyParser. Keep the existing COLMAP + OpenSplat code paths intact as an alternative fallback but comment out their entry point so InstantSplat is the default. Error handling: if InstantSplat fails or prerequisites are missing, display the failure in an ImGui dialog box, write the error details to a timestamped log file (e.g. logs/import_error_2026-04-10_143022.log), and stop the import process cleanly. The import progress should be reported via AsyncJob/ProgressModal. Note: InstantSplat is licensed for non-commercial/research use only (INRIA 3DGS license).",
-    "passes": false,
+    "passes": true,
     "acceptance": [
       "The system builds without errors or warnings",
       "Prerequisite check detects missing Docker, nvidia-container-toolkit, or InstantSplat image and reports a clear error in an ImGui dialog",
