@@ -12,6 +12,7 @@ struct InstantSplatConfig {
     std::filesystem::path outputDir;   // host directory for InstantSplat output (PLY goes here)
     std::string dockerImage{"world_imagine/instantsplat:latest"};
     int trainIterations = 7000;
+    int nViews = 4;  // views passed to init_geo.py; MASt3R cost is O(n²) — keep ≤ 12 on <16 GB RAM
 };
 
 // Checks whether the Docker prerequisites for InstantSplat are available.

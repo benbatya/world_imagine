@@ -19,13 +19,21 @@ WORKDIR /opt/instantsplat
 RUN git clone --recursive --depth 1 \
         https://github.com/NVlabs/InstantSplat.git .
 
+# System libraries required by OpenCV (libGL) and open3d (libGLib)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install any missing Python dependencies
 RUN pip install --no-cache-dir \
         plyfile \
         tqdm \
         scipy \
         trimesh \
-        ninja
+        ninja \
+        icecream \
+        open3d
 
 # Compile CUDA submodules (requires nvcc; no running GPU needed for compilation)
 RUN cd submodules/simple-knn && \

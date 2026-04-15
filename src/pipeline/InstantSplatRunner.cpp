@@ -257,26 +257,35 @@ fs::path InstantSplatRunner::run(const InstantSplatConfig& cfg, AsyncJob& job, f
                                  float progressHi) {
     const float range = progressHi - progressLo;
 
-    // Ensure output directory exists
+    // Ensure output and workspace directories exist.
+    // workspace/ is mounted as /data/frames so init_geo.py can write sparse_0/,
+    // confidence_dsp.npy, etc. there — and those files persist across docker run
+    // invocations (each stage is a separate --rm container).
+    // The actual frame images are layered on top via a second bind-mount at
+    // /data/frames/images, which is what init_geo.py / train.py expect.
     fs::create_directories(cfg.outputDir);
+    fs::path absWorkspace = fs::absolute(cfg.outputDir / "workspace");
+    fs::create_directories(absWorkspace);
+    fs::create_directories(absWorkspace / "images"); // ensure mount point exists
 
     // Absolute paths for Docker mounts
     fs::path absFrames = fs::absolute(cfg.framesDir);
     fs::path absOutput = fs::absolute(cfg.outputDir);
 
     // Container paths
-    const std::string containerFrames = "/data/frames";
-    const std::string containerOutput = "/data/output";
-    const std::string containerWorkdir = "/data";
+    const std::string containerSourcePath = "/data/frames";          // workspace (writable, persists)
+    const std::string containerImages     = "/data/frames/images";   // frames (bind-mounted on top)
+    const std::string containerOutput     = "/data/output";
+    const std::string containerWorkdir    = "/opt/instantsplat";
 
-    // Common docker run prefix
+    // Common docker run prefix — workspace first, then images on top
     auto dockerBase = [&]() -> std::vector<std::string> {
-        return {"docker",       "run",
-                "--rm",         "--gpus",
-                "all",          "-v",
-                absFrames.string() + ":" + containerFrames + ":ro",
-                "-v",           absOutput.string() + ":" + containerOutput,
-                "-w",           containerWorkdir,
+        return {"docker",  "run",
+                "--rm",    "--gpus",  "all",
+                "-v",      absWorkspace.string() + ":" + containerSourcePath,
+                "-v",      absFrames.string()    + ":" + containerImages,
+                "-v",      absOutput.string()    + ":" + containerOutput,
+                "-w",      containerWorkdir,
                 cfg.dockerImage};
     };
 
@@ -287,10 +296,10 @@ fs::path InstantSplatRunner::run(const InstantSplatConfig& cfg, AsyncJob& job, f
     {
         auto args = dockerBase();
         // init_geo.py expects:
-        //   --source_path <frames_dir> --model_path <output_dir> --n_views <num>
+        //   --source_path <dir_containing_images/> --model_path <output_dir> --n_views <num>
         args.insert(args.end(),
-                    {"python", "init_geo.py", "--source_path", containerFrames, "--model_path",
-                     containerOutput, "--n_views", "32"});
+                    {"python", "init_geo.py", "--source_path", containerSourcePath, "--model_path",
+                     containerOutput, "--n_views", std::to_string(cfg.nViews)});
 
         int rc = runDockerCommand(args, job, [&](const std::string& line) {
             // Report status updates from init_geo
@@ -314,8 +323,9 @@ fs::path InstantSplatRunner::run(const InstantSplatConfig& cfg, AsyncJob& job, f
     {
         auto args = dockerBase();
         args.insert(args.end(),
-                    {"python", "train.py", "--source_path", containerFrames, "--model_path",
-                     containerOutput, "--iterations", std::to_string(cfg.trainIterations)});
+                    {"python", "train.py", "--source_path", containerSourcePath, "--model_path",
+                     containerOutput, "--iterations", std::to_string(cfg.trainIterations),
+                     "--n_views", std::to_string(cfg.nViews)});
 
         float trainLo = progressLo + range * 0.4f;
         float trainHi = progressLo + range * 0.85f;
@@ -343,8 +353,9 @@ fs::path InstantSplatRunner::run(const InstantSplatConfig& cfg, AsyncJob& job, f
     {
         auto args = dockerBase();
         args.insert(args.end(),
-                    {"python", "render.py", "--source_path", containerFrames, "--model_path",
-                     containerOutput, "--iteration", std::to_string(cfg.trainIterations)});
+                    {"python", "render.py", "--source_path", containerSourcePath, "--model_path",
+                     containerOutput, "--iteration", std::to_string(cfg.trainIterations),
+                     "--n_views", std::to_string(cfg.nViews)});
 
         int rc = runDockerCommand(args, job, [&](const std::string& line) {
             job.setStatusText("InstantSplat render: " + line);
